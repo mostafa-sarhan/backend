@@ -4,19 +4,33 @@ import { orderModel } from "./models/order";
 import cors from "cors";
 import { deliveryModel } from "./delivery";
 import "./archiveOrder";
+import dotenv from 'dotenv';
+dotenv.config();  // بيقرأ كل المتغيرات من ملف .env
 
 
 
 const app = express();
-const port = 5000;
+// const port = 5000;
+const port = process.env.PORT || 5000;
+
+const mongoUri = process.env.MONGO_URI;
+if (!mongoUri) {
+  throw new Error("Missing MONGO_URI in environment variables");
+}
+
+mongoose.connect(mongoUri)
+    .then(() => console.log('Connected to MongoDB Atlas!'))
+    .catch(err => console.error(err));
+
+
 
 app.use(cors({
     origin:["http://localhost:5173","https://sys-shipping-m4j1hlo4n-mostafa-sarhans-projects.vercel.app"]
 }));
 app.use(express.json());
 
-mongoose.connect('mongodb://127.0.0.1:27017/orders')
-    .then(() => console.log('Connected!'));
+// mongoose.connect('mongodb://127.0.0.1:27017/orders')
+//     .then(() => console.log('Connected!'));
 
 // app.get("/",(req,res) => {
 //     const order = new orderModel ({fullName:"Hoosam_sarhan",phone:"011223",address:"tala",cost:"250",description:"gil",company:"otex"});
@@ -112,21 +126,7 @@ app.get("/orders/barcode/:barcode", async (req, res) => {
   }
 });
 
-// Get order by barcode
-app.get("/orders/barcode/:barcode", async (req, res) => {
-  try {
-    const { barcode } = req.params;
-    const order = await orderModel.findOne({ barcode });
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    return res.status(200).json(order);
-  } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
-  }
-});
 
 
 // ================================
