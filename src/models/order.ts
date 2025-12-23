@@ -1,0 +1,43 @@
+import mongoose, { Schema, Document } from "mongoose";
+
+interface Order extends Document {
+  fullName: string;
+  phone: string;
+  address: string;
+  cost: number;
+  description?: string;
+  company?: string;
+  barcode: string;
+  delivery: string;
+  status: string;
+  isArchived: boolean;
+  createdAt: Date;
+}
+
+const orderSchema: Schema = new Schema(
+  {
+    fullName: { type: String, required: true },
+    phone: { type: String, required: true },
+    address: { type: String, required: true },
+    cost: { type: Number, required: true },
+
+    description: { type: String },
+    company: { type: String },
+
+    delivery: { type: String, default: "لم يحدد" },
+    status: { type: String, default: "قيد التنفيذ" },
+
+    isArchived: { type: Boolean, default: false },
+
+    barcode: {
+      type: String,
+      default: () =>
+        Math.floor(10000000 + Math.random() * 90000000).toString(),
+    },
+  },
+  {
+    timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
+  }
+);
+
+export const orderModel = mongoose.model<Order>("orders", orderSchema);
