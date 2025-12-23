@@ -33,9 +33,13 @@ const orderSchema: Schema = new Schema(
     merchant: { type: mongoose.Schema.Types.ObjectId, ref: "Merchant" }, // <-- ضيف هنا
     barcode: {
       type: String,
+      required: true,
+      unique: true,   // ⭐ أهم سطر
+      index: true,
       default: () =>
         Math.floor(10000000 + Math.random() * 90000000).toString(),
     },
+
   },
   {
     timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
