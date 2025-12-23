@@ -38,15 +38,16 @@ app.use(express.json());
 // ================================
 
 // Get all orders
-app.get("/orders", async (req, res) => {
+app.get("/orders", async (req,res) => {
   try {
-    const orders = await orderModel.find();
-    res.status(200).json(orders);
+    const order = await orderModel.find();
+    res.send(order);
   } catch (error) {
-    console.error(error);
+    console.error("GET /orders error:", error);
     res.status(500).json({ message: "Server error", error });
   }
 });
+
 
 // Get order by ID
 app.get("/orders/:id", async (req, res) => {
