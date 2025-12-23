@@ -12,6 +12,8 @@ interface Order extends Document {
   status: string;
   isArchived: boolean;
   createdAt: Date;
+  merchant?: mongoose.Types.ObjectId; // <-- ضيف ده
+
 }
 
 const orderSchema: Schema = new Schema(
@@ -28,7 +30,7 @@ const orderSchema: Schema = new Schema(
     status: { type: String, default: "قيد التنفيذ" },
 
     isArchived: { type: Boolean, default: false },
-
+    merchant: { type: mongoose.Schema.Types.ObjectId, ref: "Merchant" }, // <-- ضيف هنا
     barcode: {
       type: String,
       default: () =>
@@ -39,5 +41,7 @@ const orderSchema: Schema = new Schema(
     timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
   }
 );
+
+
 
 export const orderModel = mongoose.model<Order>("orders", orderSchema);
