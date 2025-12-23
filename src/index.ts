@@ -148,6 +148,10 @@ app.get("/orders/delivery/:delivery", async (req, res) => {
   }
 });
 
+
+//---------------------------
+//start Delivery
+//---------------------------
 // Add new delivery
 app.post("/deliveries", async (req, res) => {
   try {
@@ -173,6 +177,12 @@ app.get("/deliveries", async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 });
+
+
+//------------------------
+//End Delivery
+//------------------------
+
 
 //-------------------------
 //merchant model
@@ -209,33 +219,65 @@ export const merchantAuth = async (
 
 
 
-app.post("/merchant/:company/order", merchantAuth, async (req: Request, res: Response) => {
-  try {
-    const { fullName, phone, address, cost, barcode } = req.body;
+app.post("/merchant/:company/order",merchantAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { fullName, phone, address, cost, barcode } = req.body;
 
-    if (!fullName || !phone || !address || !cost || !barcode) {
-      return res.status(400).json({ message: "Incomplete order data" });
+      // 1️⃣ Validation
+      if (!fullName || !phone || !address || !cost || !barcode) {
+        return res.status(400).json({
+          message: "Incomplete order data"
+        });
+      }
+
+      // 2️⃣ التاجر الحقيقي من API Key
+      const merchant = req.merchant!;
+      const company = merchant.name; // 🔒 ثابت
+
+      // 3️⃣ Check على الباركود (قبل الإنشاء)
+      const barcodeExists = await orderModel.findOne({ barcode });
+
+      if (barcodeExists) {
+        return res.status(409).json({
+          message: "Barcode already exists",
+          barcode
+        });
+      }
+
+      // 4️⃣ إنشاء الأوردر
+      const order = await orderModel.create({
+        fullName,
+        phone,
+        address,
+        cost,
+        barcode,
+        company,
+        merchant: merchant._id
+      });
+
+      res.status(201).json({
+        message: "Order created successfully",
+        order
+      });
+
+    } catch (error: any) {
+      console.error("Create merchant order failed:", error);
+
+      // 5️⃣ حماية إضافية (لو MongoDB unique index)
+      if (error.code === 11000) {
+        return res.status(409).json({
+          message: "Barcode already exists",
+          field: "barcode"
+        });
+      }
+      res.status(500).json({
+        message: "Create order failed"
+      });
     }
-
-    const merchant = req.merchant!;
-    const company = merchant.name; // الاسم الحقيقي للتاجر من الـ API Key
-
-    const order = await orderModel.create({
-      fullName,
-      phone,
-      address,
-      cost,
-      company,           // الاسم الثابت
-      barcode,
-      merchant: merchant._id
-    });
-
-    res.status(201).json(order);
-  } catch (error) {
-    console.error("Create merchant order failed:", error);
-    res.status(500).json({ message: "Create order failed" });
   }
-});
+);
+
 
 // إنشاء تاجر جديد مع توليد API Key
 app.post("/merchant", async (req: Request, res: Response) => {
@@ -260,6 +302,11 @@ app.post("/merchant", async (req: Request, res: Response) => {
     res.status(500).json({ message: "Create merchant failed" });
   }
 });
+
+//----------------------------
+//End of Merchant
+//----------------------------
+
 
 
 
