@@ -219,7 +219,7 @@ export const merchantAuth = async (
 
 
 
-app.post("/merchant/:company/order",merchantAuth,
+app.post("/merchant/order",merchantAuth,
   async (req: Request, res: Response) => {
     try {
       const { fullName, phone, address, cost, barcode } = req.body;
