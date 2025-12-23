@@ -1,16 +1,21 @@
 import mongoose, { Document } from "mongoose";
-interface order extends Document {
+interface Order extends Document {
     fullName: string;
     phone: string;
     address: string;
-    cost: string;
-    description: string;
-    company: string;
+    cost: number;
+    description?: string;
+    company?: string;
+    barcode: string;
+    delivery: string;
+    status: string;
+    isArchived: boolean;
+    createdAt: Date;
 }
-export declare const orderModel: mongoose.Model<order, {}, {}, {}, mongoose.Document<unknown, {}, order, {}, mongoose.DefaultSchemaOptions> & order & Required<{
+export declare const orderModel: mongoose.Model<Order, {}, {}, {}, mongoose.Document<unknown, {}, Order, {}, mongoose.DefaultSchemaOptions> & Order & Required<{
     _id: mongoose.Types.ObjectId;
 }> & {
     __v: number;
-}, any, order>;
+}, any, Order>;
 export {};
 //# sourceMappingURL=order.d.ts.map

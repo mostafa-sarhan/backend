@@ -20,11 +20,11 @@
     "node-cron": "^4.2.1",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@types/dotenv": "^6.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
-    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.6"
   }
 }
