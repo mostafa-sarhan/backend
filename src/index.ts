@@ -211,21 +211,23 @@ export const merchantAuth = async (
 
 app.post("/merchant/:company/order", merchantAuth, async (req: Request, res: Response) => {
   try {
-    const { company } = req.params;
     const { fullName, phone, address, cost, barcode } = req.body;
 
     if (!fullName || !phone || !address || !cost || !barcode) {
       return res.status(400).json({ message: "Incomplete order data" });
     }
 
+    const merchant = req.merchant!;
+    const company = merchant.name; // الاسم الحقيقي للتاجر من الـ API Key
+
     const order = await orderModel.create({
       fullName,
       phone,
       address,
       cost,
-      company,
+      company,           // الاسم الثابت
       barcode,
-      merchant: req.merchant?._id // ✅ دلوقتي تمام
+      merchant: merchant._id
     });
 
     res.status(201).json(order);
