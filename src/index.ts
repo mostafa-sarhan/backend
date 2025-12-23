@@ -5,6 +5,12 @@ import cors from "cors";
 import { orderModel } from "./models/order";
 import { deliveryModel } from "./delivery";
 import "./archiveOrder";
+import { merchantModel } from "./merchantModel";
+import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
+
+
+
 
 // Load environment variables from .env
 dotenv.config();
@@ -167,6 +173,95 @@ app.get("/deliveries", async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 });
+
+//-------------------------
+//merchant model
+//-------------------------
+
+
+
+export const merchantAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const apiKey = req.headers["api-key"] as string | undefined;
+
+    if (!apiKey) {
+      return res.status(401).json({ message: "API Key required" });
+    }
+
+    const merchant = await merchantModel.findOne({ apiKey });
+
+    if (!merchant) {
+      return res.status(403).json({ message: "Invalid API Key" });
+    }
+
+    req.merchant = merchant; // ✅ دلوقتي TypeScript عارفها
+
+    next();
+  } catch (error) {
+    console.error("Merchant Auth Error:", error);
+    res.status(500).json({ message: "Auth failed" });
+  }
+};
+
+
+
+app.post("/merchant/:company/order", merchantAuth, async (req: Request, res: Response) => {
+  try {
+    const { company } = req.params;
+    const { fullName, phone, address, cost, barcode } = req.body;
+
+    if (!fullName || !phone || !address || !cost || !barcode) {
+      return res.status(400).json({ message: "Incomplete order data" });
+    }
+
+    const order = await orderModel.create({
+      fullName,
+      phone,
+      address,
+      cost,
+      company,
+      barcode,
+      merchant: req.merchant?._id // ✅ دلوقتي تمام
+    });
+
+    res.status(201).json(order);
+  } catch (error) {
+    console.error("Create merchant order failed:", error);
+    res.status(500).json({ message: "Create order failed" });
+  }
+});
+
+// إنشاء تاجر جديد مع توليد API Key
+app.post("/merchant", async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ message: "Name is required" });
+
+    // توليد مفتاح API عشوائي
+    const apiKey = crypto.randomBytes(16).toString("hex");
+
+    const merchant = await merchantModel.create({ name, apiKey });
+    res.status(201).json({
+      message: "Merchant created successfully",
+      merchant: {
+        id: merchant._id,
+        name: merchant.name,
+        apiKey: merchant.apiKey
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Create merchant failed" });
+  }
+});
+
+
+
+
 
 // Start server
 app.listen(port, () => {
