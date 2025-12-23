@@ -33,24 +33,15 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.orderModel = void 0;
+exports.deliveryModel = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const orderSchema = new mongoose_1.Schema({
-    fullName: { type: String, required: true },
-    phone: { type: String, required: true },
-    address: { type: String, required: true },
-    cost: { type: Number, required: true },
-    description: { type: String },
-    company: { type: String },
-    delivery: { type: String, default: "لم يحدد" },
-    status: { type: String, default: "قيد التنفيذ" },
-    isArchived: { type: Boolean, default: false },
-    barcode: {
+const deliverySchema = new mongoose_1.Schema({
+    name: {
         type: String,
-        default: () => Math.floor(10000000 + Math.random() * 90000000).toString(),
+        required: true,
+        unique: true,
+        trim: true,
     },
-}, {
-    timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
-});
-exports.orderModel = mongoose_1.default.model("orders", orderSchema);
-//# sourceMappingURL=order.js.map
+}, { timestamps: true });
+exports.deliveryModel = mongoose_1.default.model("deliveries", deliverySchema);
+//# sourceMappingURL=delivery.js.map

@@ -1,196 +1,172 @@
 import express from "express";
-import mongoose from 'mongoose';
-import { orderModel } from "./models/order";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 import cors from "cors";
+import { orderModel } from "./models/order";
 import { deliveryModel } from "./delivery";
 import "./archiveOrder";
-import dotenv from 'dotenv';
-dotenv.config();  // بيقرأ كل المتغيرات من ملف .env
 
-
+// Load environment variables from .env
+dotenv.config();
 
 const app = express();
-// const port = 5000;
 const port = process.env.PORT || 5000;
 
+// MongoDB URI from environment
 const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
   throw new Error("Missing MONGO_URI in environment variables");
 }
 
+// Connect to MongoDB Atlas
 mongoose.connect(mongoUri)
-    .then(() => console.log('Connected to MongoDB Atlas!'))
-    .catch(err => console.error(err));
+  .then(() => console.log("✅ Connected to MongoDB Atlas!"))
+  .catch(err => console.error("❌ MongoDB connection error:", err));
 
-
-
+// Middleware
 app.use(cors({
-    origin:["http://localhost:5173","https://sys-shipping-m4j1hlo4n-mostafa-sarhans-projects.vercel.app"]
+  origin: [
+    "http://localhost:5173",
+    "https://sys-shipping-m4j1hlo4n-mostafa-sarhans-projects.vercel.app",
+    "https://system-shipping.onrender.com"
+  ]
 }));
 app.use(express.json());
 
-// mongoose.connect('mongodb://127.0.0.1:27017/orders')
-//     .then(() => console.log('Connected!'));
-
-// app.get("/",(req,res) => {
-//     const order = new orderModel ({fullName:"Hoosam_sarhan",phone:"011223",address:"tala",cost:"250",description:"gil",company:"otex"});
-//     order.save();
-//     res.send("Hello world");
-// })
+// ================================
+// Routes
+// ================================
 
 // Get all orders
-app.get("/orders",async (req,res) => {
-    const order = await orderModel.find()
-    res.send(order)
+app.get("/orders", async (req, res) => {
+  try {
+    const orders = await orderModel.find();
+    res.status(200).json(orders);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error });
+  }
 });
 
-// Get unique order
-app.get("/orders/:id",async (req,res) => {
-    const order = await orderModel.find()
-    res.send(order)
-})
+// Get order by ID
+app.get("/orders/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await orderModel.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error });
+  }
+});
 
-// create a new order
-// send data in body
-
-app.post("/orders",async(req,res)=>{
+// Create new order
+app.post("/orders", async (req, res) => {
+  try {
     const data = req.body;
     const newOrder = await orderModel.create(data);
-    res.status(201).send(newOrder);
+    res.status(201).json(newOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Create failed", error });
+  }
 });
 
-
-// update a order
+// Update full order
 app.put("/orders/:id", async (req, res) => {
-    const id = req.params.id;
+  try {
+    const { id } = req.params;
     const data = req.body;
     const order = await orderModel.findByIdAndUpdate(id, data, { new: true });
-
-    if (!order) {
-        return res.status(404).send("Order not found");
-    }
-
-    return res.status(200).send(order);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Update failed", error });
+  }
 });
 
-
-//patch order
-
+// Patch order (partial update)
 app.patch("/orders/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body;
-
-    const order = await orderModel.findByIdAndUpdate(
-      id,
-      { $set: data },   // ✅ PATCH = تعديل جزئي
-      { new: true }
-    );
-
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    return res.status(200).json(order);
+    const order = await orderModel.findByIdAndUpdate(id, { $set: data }, { new: true });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
   } catch (error) {
-    return res.status(500).json({ message: "Update failed", error });
+    console.error(error);
+    res.status(500).json({ message: "Patch failed", error });
   }
 });
 
-// delete a order
-
-app.delete("/orders/:id",async (req,res)=>{
-    const id = req.params.id;
+// Delete order
+app.delete("/orders/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
     const order = await orderModel.findByIdAndDelete(id);
-
-    if (!order) {
-        return res.status(404).send("Order not found");
-    }
-
-    return res.send("Okey");
-})
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json({ message: "Order deleted" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Delete failed", error });
+  }
+});
 
 // Get order by barcode
 app.get("/orders/barcode/:barcode", async (req, res) => {
   try {
     const { barcode } = req.params;
     const order = await orderModel.findOne({ barcode });
-
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    return res.status(200).json(order);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    console.error(error);
+    res.status(500).json({ message: "Server error", error });
   }
 });
 
-
-
-
-// ================================
-// Get orders by delivery name
-// ================================
+// Get orders by delivery
 app.get("/orders/delivery/:delivery", async (req, res) => {
   try {
     const { delivery } = req.params;
-
-    const orders = await orderModel
-      .find({ delivery })
-      .sort({ createdAt: -1 });
-
-    if (!orders.length) {
-      return res.status(404).json({ message: "No orders for this delivery" });
-    }
-
-    return res.status(200).json(orders);
+    const orders = await orderModel.find({ delivery }).sort({ createdAt: -1 });
+    if (!orders.length) return res.status(404).json({ message: "No orders for this delivery" });
+    res.status(200).json(orders);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error });
   }
 });
 
-
-// add new delivery
+// Add new delivery
 app.post("/deliveries", async (req, res) => {
   try {
     const { name } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ message: "اسم المندوب مطلوب" });
-    }
-
+    if (!name) return res.status(400).json({ message: "Delivery name required" });
     const exists = await deliveryModel.findOne({ name });
-    if (exists) {
-      return res.status(400).json({ message: "المندوب موجود بالفعل" });
-    }
-
+    if (exists) return res.status(400).json({ message: "Delivery already exists" });
     const delivery = await deliveryModel.create({ name });
-    return res.status(201).json(delivery);
+    res.status(201).json(delivery);
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    console.error(error);
+    res.status(500).json({ message: "Create delivery failed", error });
   }
 });
 
-// get all deliveries
+// Get all deliveries
 app.get("/deliveries", async (req, res) => {
   try {
     const deliveries = await deliveryModel.find().sort({ createdAt: -1 });
-    return res.status(200).json(deliveries);
+    res.status(200).json(deliveries);
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error });
+    console.error(error);
+    res.status(500).json({ message: "Server error", error });
   }
 });
 
-
-
-
-
-app.listen(port, ()=>{
-    console.log("Running on port  " + port);
-})
-
-
-
-
+// Start server
+app.listen(port, () => {
+  console.log(`🚀 Server running on port ${port}`);
+});
