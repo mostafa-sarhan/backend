@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { orderModel } from "./models/order";
 import { deliveryModel } from "./delivery";
-import "./archiveOrder.ts";
+import "./archiveOrder";
 import { merchantModel } from "./merchantModel";
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
