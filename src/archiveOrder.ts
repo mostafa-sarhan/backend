@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { orderModel } from "./models/order";
 
 // كل يوم الساعة 12 بليل
-cron.schedule("0 0 * * *", async () => {
+cron.schedule("* * * * *", async () => {
   try {
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
