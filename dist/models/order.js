@@ -45,8 +45,12 @@ const orderSchema = new mongoose_1.Schema({
     delivery: { type: String, default: "لم يحدد" },
     status: { type: String, default: "قيد التنفيذ" },
     isArchived: { type: Boolean, default: false },
+    merchant: { type: mongoose_1.default.Schema.Types.ObjectId, ref: "Merchant" }, // <-- ضيف هنا
     barcode: {
         type: String,
+        required: true,
+        unique: true, // ⭐ أهم سطر
+        index: true,
         default: () => Math.floor(10000000 + Math.random() * 90000000).toString(),
     },
 }, {

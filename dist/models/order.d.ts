@@ -11,6 +11,7 @@ interface Order extends Document {
     status: string;
     isArchived: boolean;
     createdAt: Date;
+    merchant?: mongoose.Types.ObjectId;
 }
 export declare const orderModel: mongoose.Model<Order, {}, {}, {}, mongoose.Document<unknown, {}, Order, {}, mongoose.DefaultSchemaOptions> & Order & Required<{
     _id: mongoose.Types.ObjectId;

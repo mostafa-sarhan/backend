@@ -1,7 +1,16 @@
+import dotenv from "dotenv";
+dotenv.config();
+
+import mongoose from "mongoose";
 import cron from "node-cron";
 import { orderModel } from "./models/order";
 
-// كل يوم الساعة 12 بليل
+mongoose.connect(process.env.MONGO_URI!)
+  .then(() => console.log("Archive DB Connected"))
+  .catch(err => console.error(err));
+
+console.log("Archive cron started");
+
 cron.schedule("* * * * *", async () => {
   try {
     const threeDaysAgo = new Date();
@@ -13,13 +22,11 @@ cron.schedule("* * * * *", async () => {
         isArchived: false,
         status: { $in: ["تم التسليم", "مرتجع", "مرفوض"] }
       },
-      {
-        $set: { isArchived: true }
-      }
+      { $set: { isArchived: true } }
     );
 
-    console.log("Archived orders:", result.modifiedCount);
-  } catch (error) {
-    console.error("Archive job error:", error);
+    console.log("Archived:", result.modifiedCount);
+  } catch (err) {
+    console.error("Archive error:", err);
   }
 });

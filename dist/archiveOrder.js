@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const node_cron_1 = __importDefault(require("node-cron"));
 const order_1 = require("./models/order");
 // كل يوم الساعة 12 بليل
-node_cron_1.default.schedule("0 0 * * *", async () => {
+node_cron_1.default.schedule("* * * * *", async () => {
     try {
         const threeDaysAgo = new Date();
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);

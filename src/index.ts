@@ -56,6 +56,7 @@ app.get("/orders", async (req,res) => {
 });
 
 
+
 // Get order by ID
 app.get("/orders/:id", async (req, res) => {
   try {
@@ -218,7 +219,7 @@ export const merchantAuth = async (
 };
 
 
-
+// Merchant create order
 app.post("/merchant/order",merchantAuth,
   async (req: Request, res: Response) => {
     try {
@@ -280,6 +281,7 @@ app.post("/merchant/order",merchantAuth,
 
 
 // إنشاء تاجر جديد مع توليد API Key
+//Create a new merchant
 app.post("/merchant", async (req: Request, res: Response) => {
   try {
     const { name } = req.body;
@@ -303,13 +305,35 @@ app.post("/merchant", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================
+// Get all merchants
+// ==========================
+app.get("/merchants", async (req: Request, res: Response) => {
+  try {
+    const merchants = await merchantModel.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      count: merchants.length,
+      merchants: merchants.map(m => ({
+        id: m._id,
+        name: m.name,
+        apiKey: m.apiKey,
+        createdAt: m.createdAt
+      }))
+    });
+
+  } catch (error) {
+    console.error("GET /merchants error:", error);
+    res.status(500).json({
+      message: "Failed to fetch merchants"
+    });
+  }
+});
+
+
 //----------------------------
 //End of Merchant
 //----------------------------
-
-
-
-
 
 
 // Start server
