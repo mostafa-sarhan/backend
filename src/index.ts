@@ -33,7 +33,7 @@ mongoose.connect(mongoUri)
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://sys-shipping-bp0bpp5tc-mostafa-sarhans-projects.vercel.app/",
+    "https://sys-shipping-bp0bpp5tc-mostafa-sarhans-projects.vercel.app",
     "https://system-shipping.onrender.com",
     "https://sys-shipping-fq92beg72-mostafa-sarhans-projects.vercel.app",
   ]
