@@ -16,6 +16,18 @@ router.get("/", auth, async (_, res: Response) => {
   }
 });
 
+router.get("/delivery/:deliveryId", auth, async (req: Request, res: Response) => {
+  try {
+    const { deliveryId } = req.params;
+
+    // تأكد أن الحقل اللي في الأوردر اسمه "delivery"
+    const orders = await orderModel.find({ delivery: deliveryId });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Get order by ID
 router.get("/:id", auth, async (req: Request, res: Response) => {
   try {
