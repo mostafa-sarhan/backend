@@ -200,7 +200,7 @@ app.post("/deliveries", auth, adminOnly, async (req: Request, res: Response) => 
 });
 
 // Get all deliveries
-app.get("/deliveries", auth, async (_, res) => {
+app.get("/deliveries", async (_, res) => {
   const deliveries = await deliveryModel.find().sort({ createdAt: -1 });
   res.json(deliveries);
 });
