@@ -44,6 +44,17 @@ mongoose.connect(process.env.MONGO_URI!).then(async () => {
   mongoose.disconnect();
 });
 
+
+mongoose.connect(process.env.MONGO_URI!).then(async () => {
+  const hashed = await bcrypt.hash("123456", 10);
+  await User.updateOne(
+    { email: "admin@test.com" },
+    { $set: { password: hashed } }
+  );
+  console.log("✅ Admin password updated!");
+  mongoose.disconnect();
+}).catch(err => console.error(err));
+
 // ---------------- AUTH ----------------
 app.post("/auth/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -206,7 +217,7 @@ app.post("/deliveries", auth, adminOnly, async (req: Request, res: Response) => 
 });
 
 // Get all deliveries
-app.get("/deliveries", async (_, res) => {
+app.get("/deliveries",auth, async (_, res) => {
   const deliveries = await deliveryModel.find().sort({ createdAt: -1 });
   res.json(deliveries);
 });
