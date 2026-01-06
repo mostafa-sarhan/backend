@@ -1,4 +1,4 @@
-import { MerchantDocument } from "./merchantModel";
+import { MerchantDocument } from "../models/merchantModel";
 
 declare global {
   namespace Express {
