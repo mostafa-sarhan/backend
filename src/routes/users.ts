@@ -23,17 +23,38 @@ router.get("/", auth, adminOnly, async (_, res: Response) => {
 router.post("/", auth, adminOnly, async (req: Request, res: Response) => {
   try {
     const { email, password, role } = req.body;
-    const hashed = await bcrypt.hash(password, 10);
 
+    if (!email || !password || !role)
+      return res.status(400).json({ message: "All fields are required" });
+
+    if (!["user", "admin"].includes(role))
+      return res.status(400).json({ message: "Invalid role" });
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser)
+      return res.status(400).json({ message: "User already exists" });
+
+    const hashed = await bcrypt.hash(password, 10);
     const newUser = await User.create({ email, password: hashed, role });
+
+    await AuditLog.create({
+      action: "CREATE_USER",
+      targetUser: email,
+      oldValue: null,
+      newValue: role,
+      changedBy: (req as any).user!.email,
+    });
+
     res.status(201).json({
-      message: "User created",
+      message: "User created successfully",
       user: { email: newUser.email, role: newUser.role },
     });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
 
 // Change password
 router.put("/password", auth, adminOnly, async (req: Request, res: Response) => {
@@ -85,5 +106,17 @@ router.put("/role", auth, adminOnly, async (req: Request, res: Response) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+
+// Get all audit logs
+router.get("/auditlogs", auth, adminOnly, async (_, res: Response) => {
+  try {
+    const logs = await AuditLog.find().sort({ date: -1 }); // ترتيب من الأحدث
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 export default router;
