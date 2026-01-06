@@ -34,26 +34,9 @@ app.use(cors({
 app.use(express.json());
 
 // ---------------- Database ----------------
-mongoose.connect(process.env.MONGO_URI!).then(async () => {
-  const hashed = await bcrypt.hash("123456", 10); // تشفير الباسورد
-  await User.updateOne(
-    { email: "admin@test.com" },
-    { $set: { password: hashed } }
-  );
-  console.log("Admin password updated to hashed!");
-  mongoose.disconnect();
-});
-
-
-mongoose.connect(process.env.MONGO_URI!).then(async () => {
-  const hashed = await bcrypt.hash("123456", 10);
-  await User.updateOne(
-    { email: "admin@test.com" },
-    { $set: { password: hashed } }
-  );
-  console.log("✅ Admin password updated!");
-  mongoose.disconnect();
-}).catch(err => console.error(err));
+mongoose.connect(process.env.MONGO_URI!)
+  .then(() => console.log("✅ Mongo Connected"))
+  .catch(err => console.error("❌ Mongo connection error:", err));
 
 // ---------------- AUTH ----------------
 app.post("/auth/login", async (req: Request, res: Response) => {
@@ -80,7 +63,7 @@ app.post("/auth/login", async (req: Request, res: Response) => {
 // ---------------- USERS ----------------
 
 // Get all users
-app.get("/users", auth, adminOnly, async (_, res) => {
+app.get("/users",  adminOnly, async (_, res) => {
   const users = await User.find().select("-password");
   res.json(users);
 });
