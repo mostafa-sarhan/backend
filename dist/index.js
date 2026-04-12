@@ -14,7 +14,12 @@ const orders_1 = __importDefault(require("./routes/orders"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const deliveries_1 = __importDefault(require("./routes/deliveries"));
 const merchants_1 = __importDefault(require("./routes/merchants"));
-dotenv_1.default.config();
+const path_1 = __importDefault(require("path"));
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), ".env") });
+console.log("ENV CHECK:", {
+    JWT: process.env.JWT_SECRET,
+    MONGO: process.env.MONGO_URI ? "OK" : "NO"
+});
 const app = (0, express_1.default)();
 const port = process.env.PORT || 5000;
 // ---------------- Middleware ----------------
@@ -29,10 +34,10 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json());
 // ---------------- Database ----------------
-console.log("MONGO_URI:", process.env.MONGO_URI);
 mongoose_1.default.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ Mongo connected"))
-    .catch(err => console.error("❌ Mongo error:", err));
+    .then(() => console.log("✅ CONNECTED"))
+    .catch(err => console.log("❌ CONNECT ERROR", err));
+console.log("MONGO_URI =", process.env.MONGO_URI);
 // ---------------- Routes ----------------
 app.use("/auth", auth_1.default); // Login / Auth
 app.use("/users", users_1.default); // Users CRUD
