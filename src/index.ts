@@ -10,8 +10,13 @@ import orderRoutes from "./routes/orders";
 import authRoutes from "./routes/auth";
 import deliveryRoutes from "./routes/deliveries";
 import merchantRoutes from "./routes/merchants";
+import path from "path";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+console.log("ENV CHECK:", {
+  JWT: process.env.JWT_SECRET,
+  MONGO: process.env.MONGO_URI ? "OK" : "NO"
+});
 
 const app = express();
 const port = process.env.PORT || 5000;
