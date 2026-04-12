@@ -29,12 +29,11 @@ app.use(cors({
 app.use(express.json());
 
 // ---------------- Database ----------------
-console.log("MONGO_URI:", process.env.MONGO_URI);
-
-mongoose.connect(process.env.MONGO_URI!)
-  .then(() => console.log("✅ Mongo connected"))
-  .catch(err => console.error("❌ Mongo error:", err));
-
+mongoose.connect(process.env.MONGO_URI!, {
+  serverSelectionTimeoutMS: 5000,
+})
+.then(() => console.log("✅ Mongo connected"))
+.catch(err => console.error("❌ Mongo error:", err));
 // ---------------- Routes ----------------
 app.use("/auth", authRoutes);         // Login / Auth
 app.use("/users", userRoutes);       // Users CRUD
