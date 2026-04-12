@@ -57,4 +57,3 @@ const orderSchema = new mongoose_1.Schema({
     timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
 });
 exports.orderModel = mongoose_1.default.model("orders", orderSchema);
-//# sourceMappingURL=order.js.map

@@ -44,4 +44,3 @@ const deliverySchema = new mongoose_1.Schema({
     },
 }, { timestamps: true });
 exports.deliveryModel = mongoose_1.default.model("deliveries", deliverySchema);
-//# sourceMappingURL=delivery.js.map

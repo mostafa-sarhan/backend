@@ -16,6 +16,7 @@ router.get("/", auth, async (_, res: Response) => {
   }
 });
 
+
 router.get("/delivery/:deliveryId", auth, async (req: Request, res: Response) => {
   try {
     const { deliveryId } = req.params;
@@ -91,10 +92,12 @@ router.delete("/:id", auth, async (req: Request, res: Response) => {
     res.json({ message: "Order deleted" });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
+    //res.status(500).json({message: "server error"});
   }
 });
 
-// Get order by barcode
+
+//get order by barcode to get item
 router.get("/barcode/:barcode", auth, async (req: Request, res: Response) => {
   try {
     const { barcode } = req.params;

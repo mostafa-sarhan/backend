@@ -22,13 +22,10 @@ const orderSchema: Schema = new Schema(
     phone: { type: String, required: true },
     address: { type: String, required: true },
     cost: { type: Number, required: true },
-
     description: { type: String },
     company: { type: String },
-
     delivery: { type: String, default: "لم يحدد" },
     status: { type: String, default: "قيد التنفيذ" },
-
     isArchived: { type: Boolean, default: false },
     merchant: { type: mongoose.Schema.Types.ObjectId, ref: "Merchant" }, // <-- ضيف هنا
     barcode: {
