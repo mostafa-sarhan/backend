@@ -6,7 +6,6 @@ import { adminOnly } from "../middleware/adminOnly";
 import { AuditLog } from "../models/AuditLog";
 
 const router = Router();
-
 // ---------------- USERS ----------------
 
 // Get all users
