@@ -18,6 +18,8 @@ console.log("ENV CHECK:", {
   MONGO: process.env.MONGO_URI ? "OK" : "NO"
 });
 
+
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -34,11 +36,11 @@ app.use(cors({
 app.use(express.json());
 
 // ---------------- Database ----------------
-mongoose.connect(process.env.MONGO_URI!, {
-  serverSelectionTimeoutMS: 5000,
-})
-.then(() => console.log("✅ Mongo connected"))
-.catch(err => console.error("❌ Mongo error:", err));
+mongoose.connect(process.env.MONGO_URI!)
+  .then(() => console.log("✅ CONNECTED"))
+  .catch(err => console.log("❌ CONNECT ERROR", err));
+
+  console.log("MONGO_URI =", process.env.MONGO_URI);
 // ---------------- Routes ----------------
 app.use("/auth", authRoutes);         // Login / Auth
 app.use("/users", userRoutes);       // Users CRUD
