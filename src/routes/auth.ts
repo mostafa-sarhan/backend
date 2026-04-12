@@ -78,40 +78,28 @@ const router = Router();
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    console.log("🔥 LOGIN HIT");
+    console.log("BODY:", req.body);
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: req.body.email });
 
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    console.log("USER:", user);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    if (!user.password) {
+      return res.status(500).json({ message: "No password in DB" });
     }
 
-    const match = password === user.password;
+    return res.json({ ok: true });
 
-    if (!match) {
-      return res.status(401).json({ message: "Wrong password" });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
-    return res.json({
-      token,
-      user: {
-        email: user.email,
-        role: user.role,
-      },
-    });
-
-  } catch (err: any) {
-    console.error("LOGIN ERROR:", err);
-    res.status(500).json({ message: err.message });
+  } catch (err) {
+    console.error("💥 ERROR:", err);
+    return res.status(500).json({ message: "Crash in login" });
   }
 });
 
+console.log("LOGIN HIT");
 // console.log("JWT:", process.env.JWT_SECRET);
 // console.log("ENV:", process.env.JWT_SECRET);
 // console.log("CWD:", process.cwd());

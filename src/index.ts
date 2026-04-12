@@ -41,6 +41,7 @@ mongoose.connect(process.env.MONGO_URI!)
   .catch(err => console.log("❌ CONNECT ERROR", err));
 
   console.log("MONGO_URI =", process.env.MONGO_URI);
+
 // ---------------- Routes ----------------
 app.use("/auth", authRoutes);         // Login / Auth
 app.use("/users", userRoutes);       // Users CRUD
