@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = require("../models/User");
 const router = (0, express_1.Router)();
 // ---------------- AUTH LOGIN ----------------
@@ -57,19 +61,29 @@ const router = (0, express_1.Router)();
 router.post("/login", async (req, res) => {
     try {
         console.log("🔥 LOGIN HIT");
-        console.log("BODY:", req.body);
-        const user = await User_1.User.findOne({ email: req.body.email });
+        const { email, password } = req.body;
+        const user = await User_1.User.findOne({ email });
         console.log("USER:", user);
-        if (!user)
+        if (!user) {
             return res.status(401).json({ message: "User not found" });
-        if (!user.password) {
-            return res.status(500).json({ message: "No password in DB" });
         }
-        return res.json({ ok: true });
+        // مؤقتًا (لأنك مخزن password plain)
+        const match = password === user.password;
+        if (!match) {
+            return res.status(401).json({ message: "Wrong password" });
+        }
+        const token = jsonwebtoken_1.default.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        return res.json({
+            token,
+            user: {
+                email: user.email,
+                role: user.role,
+            },
+        });
     }
     catch (err) {
-        console.error("💥 ERROR:", err);
-        return res.status(500).json({ message: "Crash in login" });
+        console.error("LOGIN ERROR:", err);
+        return res.status(500).json({ message: "Server error" });
     }
 });
 console.log("LOGIN HIT");
