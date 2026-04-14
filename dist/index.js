@@ -31,6 +31,7 @@ app.use((0, cors_1.default)({
         "https://sys-shipping-fq92beg72-mostafa-sarhans-projects.vercel.app",
         "https://sys-shipping-dtbownf6v-mostafa-sarhans-projects.vercel.app",
         "https://sys-shipping-k99g6uk18-mostafa-sarhans-projects.vercel.app",
+        "https://shipping-system.vercel.app",
     ]
 }));
 app.use(express_1.default.json());
