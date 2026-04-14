@@ -31,6 +31,7 @@ app.use(cors({
     "https://system-shipping.onrender.com",
     "https://sys-shipping-fq92beg72-mostafa-sarhans-projects.vercel.app",
     "https://sys-shipping-dtbownf6v-mostafa-sarhans-projects.vercel.app",
+    "https://sys-shipping-k99g6uk18-mostafa-sarhans-projects.vercel.app",
   ]
 }));
 app.use(express.json());
