@@ -111,7 +111,7 @@ router.put("/role", auth, adminOnly, async (req: Request, res: Response) => {
   try {
     const { targetEmail, newRole } = req.body;
 
-    if (!["user", "admin", "employee"].includes(newRole)) {
+    if (![ "admin", "employee"].includes(newRole)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
