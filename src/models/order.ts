@@ -1,5 +1,9 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export const ORDER_STATUSES = ["قيد التنفيذ", "مع المندوب", "تم التسليم", "مرتجع", "استبدال", "مرفوض"];
+// Statuses that close an order; they start the archive countdown.
+export const FINAL_STATUSES = ["تم التسليم", "مرتجع", "مرفوض"];
+
 interface Order extends Document {
   fullName: string;
   phone: string;
@@ -11,12 +15,15 @@ interface Order extends Document {
   delivery: string;
   status: string;
   isArchived: boolean;
+  deliveredAt?: Date;
+  merchant?: mongoose.Types.ObjectId;
   createdAt: Date;
-  merchant?: mongoose.Types.ObjectId; // <-- ضيف ده
-
+  updatedAt: Date;
 }
 
-const orderSchema: Schema = new Schema(
+export const generateBarcode = () => Math.floor(10000000 + Math.random() * 90000000).toString();
+
+const orderSchema = new Schema<Order>(
   {
     fullName: { type: String, required: true },
     phone: { type: String, required: true },
@@ -27,22 +34,27 @@ const orderSchema: Schema = new Schema(
     delivery: { type: String, default: "لم يحدد" },
     status: { type: String, default: "قيد التنفيذ" },
     isArchived: { type: Boolean, default: false },
-    merchant: { type: mongoose.Schema.Types.ObjectId, ref: "Merchant" }, // <-- ضيف هنا
-    barcode: {
-      type: String,
-      required: true,
-      unique: true,   // ⭐ أهم سطر
-      index: true,
-      default: () =>
-        Math.floor(10000000 + Math.random() * 90000000).toString(),
-    },
-
+    deliveredAt: { type: Date },
+    merchant: { type: Schema.Types.ObjectId, ref: "Merchant" },
+    barcode: { type: String, required: true, unique: true, default: generateBarcode },
   },
-  {
-    timestamps: true, // ⭐ ده هيعمل createdAt و updatedAt تلقائي
-  }
+  { timestamps: true }
 );
 
-
-
 export const orderModel = mongoose.model<Order>("orders", orderSchema);
+
+const isDuplicateBarcode = (err: any) => err?.code === 11000 && err?.keyPattern?.barcode;
+
+// Creates an order; if the barcode was auto-generated and collides, retries with a new one.
+export async function createOrderWithBarcode(data: Record<string, unknown>, attempts = 5) {
+  const autoBarcode = !data.barcode;
+  for (let i = 0; ; i++) {
+    try {
+      return await orderModel.create(autoBarcode ? { ...data, barcode: generateBarcode() } : data);
+    } catch (err) {
+      if (!autoBarcode || !isDuplicateBarcode(err) || i >= attempts - 1) throw err;
+    }
+  }
+}
+
+export { isDuplicateBarcode };

@@ -1,4 +1,5 @@
-import { MerchantDocument } from "../models/merchantModel";
+import type { MerchantDocument } from "../models/merchantModel";
+import type { Role } from "../models/User";
 
 declare global {
   namespace Express {
@@ -7,7 +8,7 @@ declare global {
       user?: {
         _id: string;
         email: string;
-        role: "admin" | "employee";
+        role: Role;
       };
     }
   }

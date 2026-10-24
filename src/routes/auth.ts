@@ -1,126 +1,50 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 import { User } from "../models/User";
+import { config } from "../config";
 
 const router = Router();
 
-// ---------------- AUTH LOGIN ----------------
-// router.post("/login", async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { message: "Too many login attempts, try again later" },
+});
 
-//     if (!email || !password) {
-//       return res.status(400).json({ message: "Email and password required" });
-//     }
+const isBcryptHash = (value: string) => /^\$2[aby]\$\d{2}\$/.test(value);
 
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(401).json({ message: "User not found" });
-//     }
-
-//     if (!user.password) {
-//       return res.status(500).json({ message: "User password missing in DB" });
-//     }
-
-//     const match = await bcrypt.compare(password, user.password);
-
-//     if (!match) {
-//       return res.status(401).json({ message: "Wrong password" });
-//     }
-
-//     const token = jwt.sign(
-//       { id: user._id, role: user.role },
-//       process.env.JWT_SECRET!,
-//       { expiresIn: "7d" }
-//     );
-
-//     res.json({
-//       token,
-//       user: { email: user.email, role: user.role },
-//     });
-
-//   } catch (err: any) {
-//     console.error("🔥 LOGIN ERROR:", err);
-//     res.status(500).json({
-//       message: err.message,
-//     });
-//   }
-// });
-
-// router.post("/login", async (req, res) => {
-//   try {
-//     console.log("🔥 BODY:", req.body);
-
-//     const { email, password } = req.body;
-
-//     const user = await User.findOne({ email });
-
-//     console.log("👤 USER:", user);
-
-//     if (!user) {
-//       return res.status(401).json({ message: "User not found" });
-//     }
-
-//     console.log("🔑 PASSWORD FROM DB:", user.password);
-
-//     const match = await bcrypt.compare(password, user.password);
-
-//     return res.json({ match });
-
-//   } catch (err: any) {
-//     console.error("💥 LOGIN ERROR:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-
-
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
-    console.log("🔥 LOGIN HIT");
-
-    const { email, password } = req.body;
+    const { email, password } = req.body ?? {};
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
+    }
 
     const user = await User.findOne({ email });
+    // Same message for unknown email and wrong password, so emails can't be probed.
+    const invalid = () => res.status(401).json({ message: "Invalid email or password" });
+    if (!user) return invalid();
 
-    console.log("USER:", user);
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    if (isBcryptHash(user.password)) {
+      if (!(await bcrypt.compare(password, user.password))) return invalid();
+    } else {
+      // Legacy plain-text password: verify, then upgrade it to a hash.
+      if (password !== user.password) return invalid();
+      user.password = await bcrypt.hash(password, 10);
+      await user.save();
     }
 
-    // مؤقتًا (لأنك مخزن password plain)
-    const match = password === user.password;
+    const token = jwt.sign({ id: user._id, role: user.role }, config.jwtSecret, { expiresIn: "7d" });
 
-    if (!match) {
-      return res.status(401).json({ message: "Wrong password" });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
-    return res.json({
-      token,
-      user: {
-        email: user.email,
-        role: user.role,
-      },
-    });
-
+    return res.json({ token, user: { email: user.email, role: user.role } });
   } catch (err) {
-    console.error("LOGIN ERROR:", err);
+    console.error("Login error:", err);
     return res.status(500).json({ message: "Server error" });
   }
 });
-
-console.log("LOGIN HIT");
-// console.log("JWT:", process.env.JWT_SECRET);
-// console.log("ENV:", process.env.JWT_SECRET);
-// console.log("CWD:", process.cwd());
-// console.log("JWT:", process.env.JWT_SECRET);
 
 export default router;

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { merchantModel } from "../models/merchantModel";
-import { orderModel } from "../models/order";
+import { orderModel, isDuplicateBarcode } from "../models/order";
 import { auth } from "../middleware/auth";
 import { adminOnly } from "../middleware/adminOnly";
 
@@ -73,6 +73,7 @@ router.post("/order", merchantAuth, async (req: Request, res: Response) => {
 
     res.status(201).json(order);
   } catch (err) {
+    if (isDuplicateBarcode(err)) return res.status(409).json({ message: "Barcode already exists" });
     res.status(500).json({ message: "Server error" });
   }
 });

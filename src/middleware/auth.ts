@@ -1,36 +1,21 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { User } from "../models/User";
+import { User, Role } from "../models/User";
+import { config } from "../config";
 
-// استخدام النوع اللي اتعرف في express.d.ts
-interface AuthRequest extends Request {
-  user?: {
-    _id: string;
-    email: string;
-    role: "admin" | "employee"; // 🟢 مهم: نفس النوع في d.ts
-  };
-}
-
-export const auth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const auth = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "No token" });
 
   try {
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded = jwt.verify(token, config.jwtSecret) as { id: string };
 
     const user = await User.findById(decoded.id).select("-password");
     if (!user) return res.status(401).json({ message: "Invalid token" });
 
-    // Type assertion للتأكد لـ TypeScript
-    req.user = {
-      _id: user._id.toString(),
-      email: user.email,
-      role: user.role as "admin" | "employee", // 🟢 هنا
-    };
-
+    req.user = { _id: user._id.toString(), email: user.email, role: user.role as Role };
     next();
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.status(401).json({ message: "Unauthorized" });
   }
 };

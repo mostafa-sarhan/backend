@@ -1,62 +1,52 @@
-///<reference path="./types/express.d.ts" />
 import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { config } from "./config";
+import { startArchiveJob } from "./jobs/archiveOrders";
 
-// Routes
 import userRoutes from "./routes/users";
 import orderRoutes from "./routes/orders";
 import authRoutes from "./routes/auth";
 import deliveryRoutes from "./routes/deliveries";
 import merchantRoutes from "./routes/merchants";
-import path from "path";
-
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
-console.log("ENV CHECK:", {
-  JWT: process.env.JWT_SECRET,
-  MONGO: process.env.MONGO_URI ? "OK" : "NO"
-});
-
-
 
 const app = express();
-const port = process.env.PORT || 5000;
 
 // ---------------- Middleware ----------------
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://sys-shipping-bp0bpp5tc-mostafa-sarhans-projects.vercel.app",
-    "https://system-shipping.onrender.com",
-    "https://sys-shipping-fq92beg72-mostafa-sarhans-projects.vercel.app",
-    "https://sys-shipping-dtbownf6v-mostafa-sarhans-projects.vercel.app",
-    "https://sys-shipping-k99g6uk18-mostafa-sarhans-projects.vercel.app",
-    "https://shipping-system.vercel.app",
-    "https://shipping-system-bkd3.vercel.app",
-  ]
-}));
-app.use(express.json());
-
-// ---------------- Database ----------------
-mongoose.connect(process.env.MONGO_URI!)
-  .then(() => console.log("✅ CONNECTED"))
-  .catch(err => console.log("❌ CONNECT ERROR", err));
-
-  console.log("MONGO_URI =", process.env.MONGO_URI);
+app.set("trust proxy", 1); // correct client IPs behind a reverse proxy (rate limiting)
+app.use(helmet());
+app.use(cors({ origin: config.corsOrigins }));
+app.use(express.json({ limit: "100kb" }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 500, standardHeaders: "draft-8", legacyHeaders: false }));
 
 // ---------------- Routes ----------------
-app.use("/auth", authRoutes);         // Login / Auth
-app.use("/users", userRoutes);       // Users CRUD
-app.use("/orders", orderRoutes);     // Orders CRUD
-app.use("/deliveries", deliveryRoutes); // Deliveries CRUD
-app.use("/merchants", merchantRoutes);  // Merchants & Merchant Orders
+app.use("/auth", authRoutes);
+app.use("/users", userRoutes);
+app.use("/orders", orderRoutes);
+app.use("/deliveries", deliveryRoutes);
+app.use("/merchants", merchantRoutes);
+
+app.get("/health", (_req, res) => {
+  res.json({ ok: true });
+});
 
 // ---------------- Global Error Handler ----------------
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(500).json({ message: "Internal Server Error" });
 });
 
-// ---------------- Start Server ----------------
-app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
+// ---------------- Start ----------------
+mongoose
+  .connect(config.mongoUri)
+  .then(() => {
+    console.log("✅ MongoDB connected");
+    startArchiveJob();
+    app.listen(config.port, () => console.log(`🚀 Server running on port ${config.port}`));
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
+  });

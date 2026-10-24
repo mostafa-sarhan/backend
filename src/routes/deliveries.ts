@@ -1,4 +1,4 @@
-import { deliveryModel } from './../delivery';
+import { deliveryModel } from "../models/delivery";
 import { Router, Request, Response } from "express";
 import { auth } from "../middleware/auth";
 import { adminOnly } from "../middleware/adminOnly";
