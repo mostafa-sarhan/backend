@@ -1,12 +1,13 @@
 import cron from "node-cron";
 import { orderModel, FINAL_STATUSES } from "../models/order";
+import { logger } from "../logger";
 
 const ARCHIVE_AFTER_DAYS = 3;
 
 // Archives orders that reached a final status more than 3 days ago.
 // Orders saved before `deliveredAt` existed fall back to `updatedAt`.
-export async function archiveOrders() {
-  const cutoff = new Date(Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+export async function archiveOrders(now = new Date()) {
+  const cutoff = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
 
   const result = await orderModel.updateMany(
     {
@@ -27,9 +28,9 @@ export async function archiveOrders() {
 export function startArchiveJob() {
   const run = () =>
     archiveOrders()
-      .then((count) => count && console.log(`📦 Archived ${count} orders`))
-      .catch((err) => console.error("Archive job error:", err));
+      .then((count) => count && logger.info({ count }, "Archived orders"))
+      .catch((err) => logger.error({ err }, "Archive job failed"));
 
   run();
-  cron.schedule("0 * * * *", run); // hourly
+  return cron.schedule("0 * * * *", run); // hourly
 }

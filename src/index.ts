@@ -1,52 +1,34 @@
-import express from "express";
-import mongoose from "mongoose";
-import cors from "cors";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import { config } from "./config";
+import { logger } from "./logger";
+import { connectDb, disconnectDb } from "./db";
+import { createApp } from "./app";
 import { startArchiveJob } from "./jobs/archiveOrders";
 
-import userRoutes from "./routes/users";
-import orderRoutes from "./routes/orders";
-import authRoutes from "./routes/auth";
-import deliveryRoutes from "./routes/deliveries";
-import merchantRoutes from "./routes/merchants";
+async function main() {
+  await connectDb(config.mongoUri);
+  logger.info("MongoDB connected");
 
-const app = express();
+  const job = config.runJobs ? startArchiveJob() : null;
+  const server = createApp().listen(config.port, () => logger.info(`Server running on port ${config.port}`));
 
-// ---------------- Middleware ----------------
-app.set("trust proxy", 1); // correct client IPs behind a reverse proxy (rate limiting)
-app.use(helmet());
-app.use(cors({ origin: config.corsOrigins }));
-app.use(express.json({ limit: "100kb" }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 500, standardHeaders: "draft-8", legacyHeaders: false }));
+  // Graceful shutdown: stop taking requests, let in-flight ones finish, then close the DB.
+  let closing = false;
+  const shutdown = (signal: string) => {
+    if (closing) return;
+    closing = true;
+    logger.info(`${signal} received, shutting down`);
+    job?.stop();
+    server.close(async () => {
+      await disconnectDb();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
 
-// ---------------- Routes ----------------
-app.use("/auth", authRoutes);
-app.use("/users", userRoutes);
-app.use("/orders", orderRoutes);
-app.use("/deliveries", deliveryRoutes);
-app.use("/merchants", merchantRoutes);
-
-app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+main().catch((err) => {
+  logger.fatal({ err }, "Startup failed");
+  process.exit(1);
 });
-
-// ---------------- Global Error Handler ----------------
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ message: "Internal Server Error" });
-});
-
-// ---------------- Start ----------------
-mongoose
-  .connect(config.mongoUri)
-  .then(() => {
-    console.log("✅ MongoDB connected");
-    startArchiveJob();
-    app.listen(config.port, () => console.log(`🚀 Server running on port ${config.port}`));
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB connection error:", err.message);
-    process.exit(1);
-  });
