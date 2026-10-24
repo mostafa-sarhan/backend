@@ -2,6 +2,13 @@ import mongoose from "mongoose";
 
 type Db = mongoose.mongo.Db;
 import { hashPassword, isBcryptHash } from "../lib/password";
+import { LEGACY_STATUS_MAP } from "../domain/orderStatus";
+import { Order } from "../models/Order";
+import { Courier } from "../models/Courier";
+import { Merchant } from "../models/Merchant";
+import { User } from "../models/User";
+import { RefreshToken } from "../models/RefreshToken";
+import { AuditEvent } from "../models/AuditEvent";
 
 export interface Migration {
   name: string;
@@ -61,6 +68,63 @@ export const migrations: Migration[] = [
         copied++;
       }
       return { copied };
+    },
+  },
+  {
+    // Arabic status strings -> English codes.
+    name: "order-status-codes",
+    async run(db) {
+      let updated = 0;
+      for (const [label, code] of Object.entries(LEGACY_STATUS_MAP)) {
+        updated += (await db.collection("orders").updateMany({ status: label }, { $set: { status: code } })).modifiedCount;
+      }
+      return { updated };
+    },
+  },
+  {
+    // Courier and company names -> ObjectId references (couriers live in "deliveries", companies are merchants).
+    name: "order-refs-to-ids",
+    async run(db) {
+      const orders = db.collection("orders");
+      const stats = { couriersCreated: 0, merchantsCreated: 0, ordersLinked: 0 };
+
+      const findOrCreate = async (collection: string, name: string, counter: "couriersCreated" | "merchantsCreated") => {
+        const existing = await db.collection(collection).findOne({ name });
+        if (existing) return existing._id;
+        stats[counter]++;
+        const now = new Date();
+        return (await db.collection(collection).insertOne({ name, createdAt: now, updatedAt: now })).insertedId;
+      };
+
+      const courierNames = (await orders.distinct("delivery", { delivery: { $type: "string" } })) as string[];
+      for (const raw of courierNames) {
+        const name = raw.trim();
+        const id = !name || name === "لم يحدد" ? null : await findOrCreate("deliveries", name, "couriersCreated");
+        stats.ordersLinked += (await orders.updateMany({ delivery: raw }, { $set: { courier: id }, $unset: { delivery: "" } })).modifiedCount;
+      }
+
+      const companyNames = (await orders.distinct("company", { company: { $type: "string" } })) as string[];
+      for (const raw of companyNames) {
+        const name = raw.trim();
+        if (name) {
+          const id = await findOrCreate("merchants", name, "merchantsCreated");
+          // Merchant-API orders already carry a merchant id; keep it.
+          await orders.updateMany({ company: raw, merchant: { $exists: false } }, { $set: { merchant: id } });
+        }
+        stats.ordersLinked += (await orders.updateMany({ company: raw }, { $unset: { company: "" } })).modifiedCount;
+      }
+
+      await orders.updateMany({ courier: { $exists: false } }, { $set: { courier: null } });
+      await orders.updateMany({ deliveredAt: { $exists: false } }, { $set: { deliveredAt: null } });
+      return stats;
+    },
+  },
+  {
+    // Create the indexes declared in the schemas and drop ones that are no longer declared.
+    name: "sync-indexes",
+    async run() {
+      for (const model of [Order, Courier, Merchant, User, RefreshToken, AuditEvent]) await model.syncIndexes();
+      return {};
     },
   },
 ];

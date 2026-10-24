@@ -1,81 +1,56 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { merchantModel } from "../models/merchantModel";
-import { orderModel, isDuplicateBarcode } from "../models/order";
-import { requireAuth as auth } from "../middleware/auth";
-import { adminOnly } from "../middleware/auth";
+import { z } from "zod";
+import { Merchant } from "../models/Merchant";
+import { Order } from "../models/Order";
+import { requireAuth, adminOnly } from "../middleware/auth";
+import { AppError } from "../lib/errors";
+import { ok, created } from "../lib/respond";
+import { str, money } from "../lib/validate";
+import { scope } from "../lib/scope";
 
 const router = Router();
 
-// ---------------- Merchant Auth Middleware ----------------
-export const merchantAuth = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const apiKey = req.headers["api-key"] as string | undefined;
-    if (!apiKey) return res.status(401).json({ message: "API Key required" });
-
-    const merchant = await merchantModel.findOne({ apiKey });
-    if (!merchant) return res.status(403).json({ message: "Invalid API Key" });
-
-    req.merchant = merchant;
-    next();
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
+// ---------------- Merchant API-key auth ----------------
+export const merchantAuth = async (req: Request, _res: Response, next: NextFunction) => {
+  const apiKey = req.headers["api-key"];
+  if (typeof apiKey !== "string" || !apiKey) return next(new AppError(401, "UNAUTHENTICATED", "API key required"));
+  const merchant = await Merchant.findOne({ apiKey });
+  if (!merchant) return next(new AppError(401, "UNAUTHENTICATED", "Invalid API key"));
+  req.merchant = merchant;
+  next();
 };
 
-// ---------------- MERCHANTS ----------------
-
-// Create merchant
-router.post("/", auth, adminOnly, async (req: Request, res: Response) => {
-  try {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ message: "Name is required" });
-
-    const apiKey = crypto.randomBytes(16).toString("hex");
-    const merchant = await merchantModel.create({ name, apiKey });
-    res.status(201).json(merchant);
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
+// Names for dropdowns, any logged-in user.
+router.get("/options", requireAuth, async (req, res) => {
+  ok(res, await Merchant.find(scope(req)).sort({ name: 1 }).select("name").lean());
 });
 
-// Get all merchants
-router.get("/", auth, adminOnly, async (_, res: Response) => {
-  try {
-    const merchants = await merchantModel.find().sort({ createdAt: -1 });
-    res.json(merchants);
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
+router.get("/", requireAuth, adminOnly, async (req, res) => {
+  ok(res, await Merchant.find(scope(req)).sort({ createdAt: -1 }).lean());
 });
 
-// ---------------- MERCHANT CREATE ORDER ----------------
+router.post("/", requireAuth, adminOnly, async (req, res) => {
+  const { name } = z.object({ name: str.name }).strict().parse(req.body);
+  const merchant = await Merchant.create({ name, apiKey: crypto.randomBytes(16).toString("hex"), ...scope(req) });
+  created(res, merchant);
+});
 
-router.post("/order", merchantAuth, async (req: Request, res: Response) => {
-  try {
-    const { fullName, phone, address, cost, barcode } = req.body;
-    if (!fullName || !phone || !address || !cost || !barcode)
-      return res.status(400).json({ message: "Incomplete order data" });
+// ---------------- Merchant creates an order ----------------
+const merchantOrder = z.object({
+  fullName: str.name,
+  phone: str.phone,
+  address: str.address,
+  cost: money,
+  barcode: str.barcode,
+  description: str.note.optional(),
+});
 
-    const merchant = req.merchant!;
-    const barcodeExists = await orderModel.findOne({ barcode });
-    if (barcodeExists) return res.status(409).json({ message: "Barcode already exists" });
-
-    const order = await orderModel.create({
-      fullName,
-      phone,
-      address,
-      cost,
-      barcode,
-      company: merchant.name,
-      merchant: merchant._id,
-    });
-
-    res.status(201).json(order);
-  } catch (err) {
-    if (isDuplicateBarcode(err)) return res.status(409).json({ message: "Barcode already exists" });
-    res.status(500).json({ message: "Server error" });
-  }
+router.post("/order", merchantAuth, async (req, res) => {
+  const { barcode, ...data } = merchantOrder.parse(req.body);
+  if (await Order.exists({ barcode })) throw new AppError(409, "DUPLICATE", "Barcode already exists");
+  const order = await Order.create({ ...data, barcode, merchant: req.merchant!._id });
+  created(res, order);
 });
 
 export default router;

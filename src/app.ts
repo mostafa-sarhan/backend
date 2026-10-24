@@ -14,7 +14,7 @@ import { originCheck } from "./middleware/csrf";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
 import orderRoutes from "./routes/orders";
-import deliveryRoutes from "./routes/deliveries";
+import courierRoutes from "./routes/couriers";
 import merchantRoutes from "./routes/merchants";
 
 export function createApp() {
@@ -57,7 +57,7 @@ export function createApp() {
   app.use("/auth", authRoutes);
   app.use("/users", userRoutes);
   app.use("/orders", orderRoutes);
-  app.use("/deliveries", deliveryRoutes);
+  app.use("/couriers", courierRoutes);
   app.use("/merchants", merchantRoutes);
 
   app.use(notFoundHandler);

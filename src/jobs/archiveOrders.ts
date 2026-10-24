@@ -1,22 +1,20 @@
 import cron from "node-cron";
-import { orderModel, FINAL_STATUSES } from "../models/order";
+import { Order } from "../models/Order";
+import { FINAL_STATUSES } from "../domain/orderStatus";
 import { logger } from "../logger";
 
 const ARCHIVE_AFTER_DAYS = 3;
 
 // Archives orders that reached a final status more than 3 days ago.
-// Orders saved before `deliveredAt` existed fall back to `updatedAt`.
 export async function archiveOrders(now = new Date()) {
   const cutoff = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
 
-  const result = await orderModel.updateMany(
+  const result = await Order.updateMany(
     {
       isArchived: false,
       status: { $in: FINAL_STATUSES },
-      $or: [
-        { deliveredAt: { $lte: cutoff } },
-        { deliveredAt: { $exists: false }, updatedAt: { $lte: cutoff } },
-      ],
+      // Orders closed before deliveredAt existed fall back to updatedAt.
+      $or: [{ deliveredAt: { $lte: cutoff } }, { deliveredAt: null, updatedAt: { $lte: cutoff } }],
     },
     { $set: { isArchived: true } },
     { timestamps: false }
