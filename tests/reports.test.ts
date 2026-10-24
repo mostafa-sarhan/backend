@@ -31,21 +31,21 @@ describe("reports use the one server formula", () => {
       courierCommission: 40,
       companyCommission: 20,
       afterCourier: 260,
-      merchantNet: 240,
+      merchantNet: 280, // courier fee is internal, not deducted from the merchant
     });
   });
 
   it("admins can try other fees", async () => {
     const { admin } = await deliveredOrders();
-    const res = await admin.get("/reports/summary").query({ archived: "all", courierFee: 30, companyFee: 0 });
-    expect(res.body.data.money.merchantNet).toBe(300 - 60);
+    const res = await admin.get("/reports/summary").query({ archived: "all", courierFee: 30, companyFee: 15 });
+    expect(res.body.data.money).toMatchObject({ courierCommission: 60, companyCommission: 30, merchantNet: 300 - 30 });
   });
 
   it("per merchant and per courier reports match the summary", async () => {
     const { admin } = await deliveredOrders();
     const merchants = (await admin.get("/reports/merchants").query({ archived: "all" })).body.data;
     expect(merchants).toHaveLength(1);
-    expect(merchants[0]).toMatchObject({ merchant: { name: "Acme" }, money: { merchantNet: 240 } });
+    expect(merchants[0]).toMatchObject({ merchant: { name: "Acme" }, money: { merchantNet: 280 } });
 
     const couriers = (await admin.get("/reports/couriers").query({ archived: "all" })).body.data;
     const ali = couriers.find((c: { courier: { name: string } | null }) => c.courier?.name === "Ali");

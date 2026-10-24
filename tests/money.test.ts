@@ -2,19 +2,24 @@ import { describe, it, expect } from "vitest";
 import { settlement, summarize } from "../src/lib/money";
 
 describe("settlement formula", () => {
-  it("subtracts both commissions from the delivered total", () => {
+  it("deducts only the company fee from the merchant by default", () => {
     expect(settlement(3, 450, { courier: 20, company: 10 })).toEqual({
       deliveredCount: 3,
       deliveredTotal: 450,
       courierCommission: 60,
       companyCommission: 30,
       afterCourier: 390,
-      merchantNet: 360,
+      merchantNet: 420,
     });
   });
 
   it("is all zero with nothing delivered", () => {
     expect(settlement(0, 0, { courier: 20, company: 10 }).merchantNet).toBe(0);
+  });
+
+  it("can also deduct the courier fee (future per-tenant setting)", () => {
+    expect(settlement(3, 450, { courier: 20, company: 10 }, ["company", "courier"]).merchantNet).toBe(360);
+    expect(settlement(3, 450, { courier: 20, company: 10 }, []).merchantNet).toBe(450);
   });
 
   it("rounds to 2 decimals", () => {
@@ -34,6 +39,6 @@ describe("settlement formula", () => {
     );
     expect(r.total).toEqual({ count: 7, amount: 780 });
     expect(r.byStatus.returned).toEqual({ count: 1, amount: 80 });
-    expect(r.money.merchantNet).toBe(300 - 40 - 20);
+    expect(r.money.merchantNet).toBe(300 - 20);
   });
 });
