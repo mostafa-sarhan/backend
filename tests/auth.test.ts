@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { app, useDb, createUser, loginAs, PASSWORD } from "./helpers";
@@ -81,9 +81,24 @@ describe("refresh + revocation", () => {
     const second = refreshCookie(refreshed);
     expect(second).not.toBe(first);
 
-    // Replaying the old token revokes everything, including the new token.
-    expect((await request(app).post("/auth/refresh").set("Cookie", first)).status).toBe(401);
-    expect((await request(app).post("/auth/refresh").set("Cookie", second)).status).toBe(401);
+    // Replaying the old token after the grace window revokes everything, including the new token.
+    vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ["Date"] });
+    try {
+      expect((await request(app).post("/auth/refresh").set("Cookie", first)).status).toBe(401);
+      expect((await request(app).post("/auth/refresh").set("Cookie", second)).status).toBe(401);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tolerates concurrent refreshes with the same token (two tabs, reload)", async () => {
+    await createUser("admin");
+    const login = await request(app).post("/auth/login").send({ email: "admin@test.com", password: PASSWORD });
+    const token = refreshCookie(login);
+
+    const [a, b] = [await request(app).post("/auth/refresh").set("Cookie", token), await request(app).post("/auth/refresh").set("Cookie", token)];
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect((await request(app).post("/auth/refresh").set("Cookie", refreshCookie(a))).status).toBe(200);
   });
 
   it("logout revokes the refresh token", async () => {

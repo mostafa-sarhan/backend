@@ -1,4 +1,7 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+
+// Tests configure themselves; never read a developer's .env there.
+if (process.env.NODE_ENV !== "test") dotenv.config({ quiet: true });
 
 function required(name: string): string {
   const value = process.env[name];

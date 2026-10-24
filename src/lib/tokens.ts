@@ -44,6 +44,8 @@ export async function issueRefreshToken(user: UserDoc) {
   return { token: `${doc._id}.${secret}`, id: doc._id };
 }
 
+const REUSE_GRACE_MS = 20_000;
+
 const invalidSession = () => new AppError(401, "SESSION_EXPIRED", "Session expired, please log in again");
 
 // Validates and rotates a refresh token. Reuse of a rotated token revokes all of the user's sessions.
@@ -58,7 +60,10 @@ export async function rotateRefreshToken(token: string | undefined) {
   const actual = Buffer.from(sha256(secret), "hex");
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw invalidSession();
 
-  if (doc.revokedAt) {
+  // A token rotated a few seconds ago is a concurrent refresh (two tabs, a reload mid-refresh),
+  // not theft. Older reuse means the token leaked: revoke every session.
+  const concurrent = doc.revokedAt && doc.replacedBy && Date.now() - doc.revokedAt.getTime() < REUSE_GRACE_MS;
+  if (doc.revokedAt && !concurrent) {
     await revokeAllSessions(doc.user);
     throw invalidSession();
   }
@@ -67,9 +72,11 @@ export async function rotateRefreshToken(token: string | undefined) {
   if (!user || doc.expiresAt < new Date() || user.tokenVersion !== doc.tokenVersion) throw invalidSession();
 
   const next = await issueRefreshToken(user);
-  doc.revokedAt = new Date();
-  doc.replacedBy = next.id;
-  await doc.save();
+  if (!concurrent) {
+    doc.revokedAt = new Date();
+    doc.replacedBy = next.id;
+    await doc.save();
+  }
 
   return { user, refreshToken: next.token };
 }
