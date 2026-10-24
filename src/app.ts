@@ -16,6 +16,7 @@ import userRoutes from "./routes/users";
 import orderRoutes from "./routes/orders";
 import courierRoutes from "./routes/couriers";
 import merchantRoutes from "./routes/merchants";
+import reportRoutes from "./routes/reports";
 
 export function createApp() {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp() {
   app.use("/orders", orderRoutes);
   app.use("/couriers", courierRoutes);
   app.use("/merchants", merchantRoutes);
+  app.use("/reports", reportRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
