@@ -1,4 +1,3 @@
-import { Request } from "express";
 import mongoose from "mongoose";
 import { Order } from "../models/Order";
 import { Fees, summarize } from "../lib/money";
@@ -32,4 +31,4 @@ export async function summaryBy(field: "merchant" | "courier", filter: Filter, f
   }));
 }
 
-export const orderIdsFilter = (req: Request, ids: string[]) => ({ _id: { $in: ids.map((id) => new mongoose.Types.ObjectId(id)) } });
+export const orderIdsFilter = (ids: string[]) => ({ _id: { $in: ids.map((id) => new mongoose.Types.ObjectId(id)) } });

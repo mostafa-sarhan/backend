@@ -51,7 +51,7 @@ router.get("/couriers", adminOnly, async (req, res) => {
 router.post("/settlement", async (req, res) => {
   const body = z.object({ orderIds: z.array(objectId).min(1).max(500) }).extend(feeQuery.shape).strict().parse(req.body);
   const f = fees(req, body);
-  ok(res, await summary({ ...scope(req), ...orderIdsFilter(req, body.orderIds) }, f), { fees: f });
+  ok(res, await summary({ ...scope(req), ...orderIdsFilter(body.orderIds) }, f), { fees: f });
 });
 
 export default router;
