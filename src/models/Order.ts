@@ -18,6 +18,8 @@ const orderSchema = new mongoose.Schema(
     // When the order reached a final status (delivered / returned / refused).
     deliveredAt: { type: Date, default: null },
     barcode: { type: String, required: true, default: generateBarcode },
+    // The merchant's own order id (merchant API); unique per merchant.
+    merchantRef: { type: String, trim: true, maxlength: 60 },
   },
   { timestamps: true }
 );
@@ -30,6 +32,7 @@ orderSchema.index({ courier: 1, status: 1 });
 orderSchema.index({ merchant: 1, createdAt: -1 });
 orderSchema.index({ phone: 1 });
 orderSchema.index({ isArchived: 1, status: 1, deliveredAt: 1 }); // archive job
+orderSchema.index({ merchant: 1, merchantRef: 1 }, { unique: true, partialFilterExpression: { merchantRef: { $type: "string" } } });
 
 export type OrderDoc = HydratedDocument<InferSchemaType<typeof orderSchema>>;
 export const Order = mongoose.model("Order", orderSchema);

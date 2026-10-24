@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 type Db = mongoose.mongo.Db;
 import { hashPassword, isBcryptHash } from "../lib/password";
 import { LEGACY_STATUS_MAP } from "../domain/orderStatus";
+import { hashApiKey } from "../lib/apiKeys";
 import { Order } from "../models/Order";
 import { Courier } from "../models/Courier";
 import { Merchant } from "../models/Merchant";
@@ -117,6 +118,24 @@ export const migrations: Migration[] = [
       await orders.updateMany({ courier: { $exists: false } }, { $set: { courier: null } });
       await orders.updateMany({ deliveredAt: { $exists: false } }, { $set: { deliveredAt: null } });
       return stats;
+    },
+  },
+  {
+    // Plain-text merchant API keys -> SHA-256 hash + prefix. Existing integrations keep their key.
+    name: "hash-merchant-api-keys",
+    async run(db) {
+      let hashed = 0;
+      for await (const m of db.collection("merchants").find({ apiKey: { $type: "string" } })) {
+        await db.collection("merchants").updateOne(
+          { _id: m._id },
+          {
+            $set: { apiKeyHash: hashApiKey(m.apiKey), apiKeyPrefix: String(m.apiKey).slice(0, 10), apiKeyCreatedAt: m.createdAt ?? new Date() },
+            $unset: { apiKey: "" },
+          }
+        );
+        hashed++;
+      }
+      return { hashed };
     },
   },
   {
