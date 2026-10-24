@@ -1,117 +1,92 @@
-import { Router, Request, Response } from "express";
-import bcrypt from "bcryptjs";
-import { User, ROLES, Role } from "../models/User";
-import { auth } from "../middleware/auth";
-import { adminOnly } from "../middleware/adminOnly";
-import { AuditLog } from "../models/AuditLog";
+import { Router } from "express";
+import { z } from "zod";
+import { User, ROLES, publicUser } from "../models/User";
+import { AuditEvent, AUDIT_ENTITIES } from "../models/AuditEvent";
+import { requireAuth, adminOnly } from "../middleware/auth";
+import { AppError, notFound } from "../lib/errors";
+import { ok, created } from "../lib/respond";
+import { str, idParams, pagination, objectId } from "../lib/validate";
+import { assertStrongPassword, hashPassword } from "../lib/password";
+import { revokeAllSessions } from "../lib/tokens";
+import { recordAudit } from "../services/audit";
 
 const router = Router();
-router.use(auth, adminOnly);
+router.use(requireAuth, adminOnly);
 
-const isRole = (value: unknown): value is Role => ROLES.includes(value as Role);
+const role = z.enum(ROLES);
 
-// Get all users
-router.get("/", async (_req, res: Response) => {
-  try {
-    res.json(await User.find().select("-password"));
-  } catch {
-    res.status(500).json({ message: "Server error" });
-  }
+router.get("/", async (_req, res) => {
+  const users = await User.find().sort({ createdAt: 1 });
+  ok(res, users.map((u) => ({ ...publicUser(u), createdAt: u.createdAt })));
 });
 
-// Create user
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const { email, password, role } = req.body ?? {};
+router.post("/", async (req, res) => {
+  const body = z.object({ email: str.email, password: z.string(), role }).parse(req.body);
+  assertStrongPassword(body.password, body.email);
 
-    if (!email || !password || !role) {
-      return res.status(400).json({ message: "All fields are required" });
+  if (await User.exists({ email: body.email })) throw new AppError(409, "DUPLICATE", "User already exists");
+
+  const user = await User.create({ email: body.email, password: await hashPassword(body.password), role: body.role });
+  await recordAudit(req, { entity: "user", entityId: user._id, action: "CREATE_USER", label: user.email, changes: { role: { from: null, to: user.role } } });
+
+  created(res, publicUser(user));
+});
+
+router.put("/:id/password", async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const { newPassword } = z.object({ newPassword: z.string() }).parse(req.body);
+
+  const user = await User.findById(id);
+  if (!user) throw notFound("User");
+  assertStrongPassword(newPassword, user.email);
+
+  user.password = await hashPassword(newPassword);
+  await user.save();
+  await revokeAllSessions(user._id);
+  await recordAudit(req, { entity: "user", entityId: user._id, action: "CHANGE_PASSWORD", label: user.email });
+
+  ok(res, publicUser(user));
+});
+
+router.put("/:id/role", async (req, res) => {
+  const { id } = idParams.parse(req.params);
+  const { role: newRole } = z.object({ role }).parse(req.body);
+
+  const user = await User.findById(id);
+  if (!user) throw notFound("User");
+  if (user.role === newRole) return ok(res, publicUser(user));
+
+  // Never leave the system without an admin, and don't let admins demote themselves.
+  if (user.role === "admin") {
+    if (user._id.toString() === req.user!.id) {
+      throw new AppError(409, "LAST_ADMIN", "You can't remove your own admin role");
     }
-    if (!isRole(role)) return res.status(400).json({ message: "Invalid role" });
-
-    if (await User.exists({ email })) {
-      return res.status(400).json({ message: "User already exists" });
+    if ((await User.countDocuments({ role: "admin" })) <= 1) {
+      throw new AppError(409, "LAST_ADMIN", "At least one admin is required");
     }
-
-    const newUser = await User.create({ email, password: await bcrypt.hash(password, 10), role });
-
-    await AuditLog.create({
-      action: "CREATE_USER",
-      targetUser: email,
-      newValue: role,
-      changedBy: req.user!.email,
-    });
-
-    res.status(201).json({
-      message: "User created successfully",
-      user: { email: newUser.email, role: newUser.role },
-    });
-  } catch (err) {
-    console.error("Create user error:", err);
-    res.status(500).json({ message: "Server error" });
   }
+
+  const oldRole = user.role;
+  user.role = newRole;
+  await user.save();
+  await revokeAllSessions(user._id);
+  await recordAudit(req, { entity: "user", entityId: user._id, action: "CHANGE_ROLE", label: user.email, changes: { role: { from: oldRole, to: newRole } } });
+
+  ok(res, publicUser(user));
 });
 
-// Change password
-router.put("/password", async (req: Request, res: Response) => {
-  try {
-    const { email, newPassword } = req.body ?? {};
-    if (!email || !newPassword) return res.status(400).json({ message: "Email and new password required" });
+// Audit log, newest first: ?page&limit&entity&entityId
+router.get("/audit-logs", async (req, res) => {
+  const q = pagination
+    .extend({ entity: z.enum(AUDIT_ENTITIES).optional(), entityId: objectId.optional() })
+    .parse(req.query);
+  const filter = { ...(q.entity && { entity: q.entity }), ...(q.entityId && { entityId: q.entityId }) };
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
-
-    await AuditLog.create({
-      action: "CHANGE_PASSWORD",
-      targetUser: email,
-      oldValue: "***",
-      newValue: "***",
-      changedBy: req.user!.email,
-    });
-
-    res.json({ message: "Password updated" });
-  } catch {
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Change role
-router.put("/role", async (req: Request, res: Response) => {
-  try {
-    const { targetEmail, newRole } = req.body ?? {};
-    if (!isRole(newRole)) return res.status(400).json({ message: "Invalid role" });
-
-    const user = await User.findOne({ email: targetEmail });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const oldRole = user.role;
-    user.role = newRole;
-    await user.save();
-
-    await AuditLog.create({
-      action: "CHANGE_ROLE",
-      targetUser: targetEmail,
-      oldValue: oldRole,
-      newValue: newRole,
-      changedBy: req.user!.email,
-    });
-
-    res.json({ message: "Role updated" });
-  } catch {
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Get all audit logs
-router.get("/auditlogs", async (_req, res: Response) => {
-  try {
-    res.json(await AuditLog.find().sort({ createdAt: -1 }));
-  } catch {
-    res.status(500).json({ message: "Server error" });
-  }
+  const [items, total] = await Promise.all([
+    AuditEvent.find(filter).sort({ createdAt: -1 }).skip((q.page - 1) * q.limit).limit(q.limit),
+    AuditEvent.countDocuments(filter),
+  ]);
+  ok(res, items, { total, page: q.page, pages: Math.ceil(total / q.limit) });
 });
 
 export default router;

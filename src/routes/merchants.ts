@@ -2,8 +2,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { merchantModel } from "../models/merchantModel";
 import { orderModel, isDuplicateBarcode } from "../models/order";
-import { auth } from "../middleware/auth";
-import { adminOnly } from "../middleware/adminOnly";
+import { requireAuth as auth } from "../middleware/auth";
+import { adminOnly } from "../middleware/auth";
 
 const router = Router();
 

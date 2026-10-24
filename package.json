@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "dev": "nodemon",
     "archive": "node dist/scripts/archive.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate": "node dist/scripts/migrate.js"
   },
   "keywords": [],
   "author": "",

@@ -1,21 +1,31 @@
-import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import { RequestHandler } from "express";
 import { User, Role } from "../models/User";
-import { config } from "../config";
+import { AppError, forbidden } from "../lib/errors";
+import { ACCESS_COOKIE, verifyAccessToken } from "../lib/tokens";
 
-export const auth = async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "No token" });
+// Authenticates via the httpOnly access-token cookie. The user is re-read on every request,
+// so role changes apply immediately and bumped tokenVersions reject old tokens.
+export const requireAuth: RequestHandler = async (req, _res, next) => {
+  const token = req.cookies?.[ACCESS_COOKIE];
+  if (!token) return next(new AppError(401, "UNAUTHENTICATED", "Not logged in"));
 
+  let payload;
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as { id: string };
-
-    const user = await User.findById(decoded.id).select("-password");
-    if (!user) return res.status(401).json({ message: "Invalid token" });
-
-    req.user = { _id: user._id.toString(), email: user.email, role: user.role as Role };
-    next();
+    payload = verifyAccessToken(token);
   } catch {
-    res.status(401).json({ message: "Unauthorized" });
+    return next(new AppError(401, "SESSION_EXPIRED", "Session expired"));
   }
+
+  const user = await User.findById(payload.sub).select("email role tokenVersion");
+  if (!user || user.tokenVersion !== payload.tv) return next(new AppError(401, "SESSION_EXPIRED", "Session expired"));
+
+  req.user = { id: user._id.toString(), email: user.email, role: user.role as Role };
+  next();
 };
+
+export const requireRole =
+  (...roles: Role[]): RequestHandler =>
+  (req, _res, next) =>
+    req.user && roles.includes(req.user.role) ? next() : next(forbidden());
+
+export const adminOnly = requireRole("admin");

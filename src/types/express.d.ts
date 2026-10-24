@@ -6,7 +6,7 @@ declare global {
     interface Request {
       merchant?: MerchantDocument;
       user?: {
-        _id: string;
+        id: string;
         email: string;
         role: Role;
       };

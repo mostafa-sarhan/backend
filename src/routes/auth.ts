@@ -1,50 +1,73 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
-import { User } from "../models/User";
-import { config } from "../config";
+import { z } from "zod";
+import { User, publicUser } from "../models/User";
+import { AppError } from "../lib/errors";
+import { ok } from "../lib/respond";
+import { str } from "../lib/validate";
+import { verifyPassword, needsRehash, hashPassword } from "../lib/password";
+import {
+  REFRESH_COOKIE,
+  signAccessToken,
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  setSessionCookies,
+  clearSessionCookies,
+} from "../lib/tokens";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
+  skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { message: "Too many login attempts, try again later" },
+  handler: (_req, _res, next) => next(new AppError(429, "RATE_LIMITED", "Too many login attempts, try again later")),
 });
 
-const isBcryptHash = (value: string) => /^\$2[aby]\$\d{2}\$/.test(value);
+const loginBody = z.object({ email: str.email, password: z.string().min(1).max(200) });
 
 router.post("/login", loginLimiter, async (req, res) => {
-  try {
-    const { email, password } = req.body ?? {};
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password required" });
-    }
+  const { email, password } = loginBody.parse(req.body);
 
-    const user = await User.findOne({ email });
-    // Same message for unknown email and wrong password, so emails can't be probed.
-    const invalid = () => res.status(401).json({ message: "Invalid email or password" });
-    if (!user) return invalid();
-
-    if (isBcryptHash(user.password)) {
-      if (!(await bcrypt.compare(password, user.password))) return invalid();
-    } else {
-      // Legacy plain-text password: verify, then upgrade it to a hash.
-      if (password !== user.password) return invalid();
-      user.password = await bcrypt.hash(password, 10);
-      await user.save();
-    }
-
-    const token = jwt.sign({ id: user._id, role: user.role }, config.jwtSecret, { expiresIn: "7d" });
-
-    return res.json({ token, user: { email: user.email, role: user.role } });
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ message: "Server error" });
+  const user = await User.findOne({ email });
+  // Same response for unknown email and wrong password, so emails can't be probed.
+  if (!user || !(await verifyPassword(password, user.password))) {
+    throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
   }
+
+  if (needsRehash(user.password)) {
+    user.password = await hashPassword(password);
+    await user.save();
+  }
+
+  const { token: refreshToken } = await issueRefreshToken(user);
+  setSessionCookies(res, signAccessToken(user), refreshToken);
+  ok(res, { user: publicUser(user) });
+});
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const { user, refreshToken } = await rotateRefreshToken(req.cookies?.[REFRESH_COOKIE]);
+    setSessionCookies(res, signAccessToken(user), refreshToken);
+    ok(res, { user: publicUser(user) });
+  } catch (err) {
+    clearSessionCookies(res);
+    throw err;
+  }
+});
+
+router.post("/logout", async (req, res) => {
+  await revokeRefreshToken(req.cookies?.[REFRESH_COOKIE]);
+  clearSessionCookies(res);
+  ok(res, { loggedOut: true });
+});
+
+router.get("/me", requireAuth, (req, res) => {
+  ok(res, { user: req.user });
 });
 
 export default router;

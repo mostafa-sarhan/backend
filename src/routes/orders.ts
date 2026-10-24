@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { orderModel, createOrderWithBarcode, isDuplicateBarcode, FINAL_STATUSES } from "../models/order";
-import { auth } from "../middleware/auth";
+import { requireAuth as auth } from "../middleware/auth";
 
 const router = Router();
 router.use(auth);

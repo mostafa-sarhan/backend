@@ -1,7 +1,7 @@
 import { deliveryModel } from "../models/delivery";
 import { Router, Request, Response } from "express";
-import { auth } from "../middleware/auth";
-import { adminOnly } from "../middleware/adminOnly";
+import { requireAuth as auth } from "../middleware/auth";
+import { adminOnly } from "../middleware/auth";
 
 const router = Router();
 
