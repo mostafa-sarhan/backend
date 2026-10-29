@@ -6,7 +6,7 @@ export const TENANT_STATUSES = ["trial", "active", "suspended"] as const;
 
 // null = unlimited
 export const PLAN_LIMITS: Record<Plan, { maxUsers: number | null; maxOrdersPerMonth: number | null }> = {
-  trial: { maxUsers: 3, maxOrdersPerMonth: 300 },
+  trial: { maxUsers: 5, maxOrdersPerMonth: 1000 },
   starter: { maxUsers: 10, maxOrdersPerMonth: 3000 },
   pro: { maxUsers: null, maxOrdersPerMonth: null },
 };

@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 // Fixed-window counters shared by all limiters and the login lockout.
-// memory (default, one process) | redis (REDIS_URL) | mongo (RATE_LIMIT_STORE=mongo) for several processes.
+// redis (REDIS_URL) | mongo | memory. Default: mongo in production (works across processes with no
+// extra infrastructure), memory elsewhere. RATE_LIMIT_STORE overrides.
 export interface Counter {
   count: number;
   resetAt: Date;
@@ -121,6 +122,8 @@ export class MongoStore implements CounterStore {
 
 export function createStore(): CounterStore {
   if (process.env.REDIS_URL) return new RedisStore(process.env.REDIS_URL);
-  if (process.env.RATE_LIMIT_STORE === "mongo") return new MongoStore();
-  return new MemoryStore();
+  const kind = process.env.RATE_LIMIT_STORE || (process.env.NODE_ENV === "production" ? "mongo" : "memory");
+  if (kind === "mongo") return new MongoStore();
+  if (kind === "memory") return new MemoryStore();
+  throw new Error("RATE_LIMIT_STORE must be mongo or memory (or set REDIS_URL)");
 }

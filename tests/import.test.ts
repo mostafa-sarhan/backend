@@ -140,6 +140,12 @@ describe("Excel import", () => {
     expect(await Order.countDocuments({ tenantId: tenant._id })).toBe(0);
   });
 
+  it("only owners and admins can import", async () => {
+    const employee = await loginAs("employee");
+    expect((await employee.get("/orders/import/template")).status).toBe(403);
+    expect((await upload(employee, await xlsx(good))).status).toBe(403);
+  });
+
   it("merchants are matched within the tenant only", async () => {
     const other = await createTenant("Other");
     await seedRefs(other); // has "Acme" in another tenant

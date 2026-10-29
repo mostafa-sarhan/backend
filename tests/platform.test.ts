@@ -23,7 +23,7 @@ describe("platform admin", () => {
     const platform = await loginPlatform();
     const res = await platform.post("/platform/tenants").send({ name: "New Co", ownerEmail: "boss@newco.test" });
     expect(res.status).toBe(201);
-    expect(res.body.data.tenant).toMatchObject({ plan: "trial", status: "trial", limits: { maxUsers: 3, maxOrdersPerMonth: 300 } });
+    expect(res.body.data.tenant).toMatchObject({ plan: "trial", status: "trial", limits: { maxUsers: 5, maxOrdersPerMonth: 1000 } });
 
     const login = await request(app).post("/auth/login").send({ email: "boss@newco.test", password: res.body.data.initialPassword });
     expect(login.status).toBe(200);
