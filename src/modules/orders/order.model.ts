@@ -5,6 +5,23 @@ import { tenantScoped, tenantIdField } from "../../lib/tenantPlugin";
 
 export const generateBarcode = () => randomInt(10_000_000, 100_000_000).toString();
 
+// Public tracking id: 20 characters from a 31-letter alphabet (no 0/O/1/I/L) ≈ 99 bits,
+// so ids can't be guessed or enumerated.
+const TRACKING_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+export const TRACKING_ID_PATTERN = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{20}$/;
+export const generateTrackingId = () => Array.from({ length: 20 }, () => TRACKING_ALPHABET[randomInt(TRACKING_ALPHABET.length)]).join("");
+
+// One entry per status change, for the order timeline and public tracking.
+const statusEventSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ORDER_STATUSES, required: true },
+    at: { type: Date, required: true },
+    by: { id: mongoose.Schema.Types.ObjectId, email: String, role: String },
+    reason: { type: String, maxlength: 300 },
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
     tenantId: tenantIdField,
@@ -28,6 +45,8 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
     barcode: { type: String, required: true, default: generateBarcode },
+    trackingId: { type: String, required: true, default: generateTrackingId },
+    statusHistory: { type: [statusEventSchema], default: [] },
     // The merchant's own order id (merchant API); unique per merchant.
     merchantRef: { type: String, trim: true, maxlength: 60 },
   },
@@ -37,6 +56,8 @@ const orderSchema = new mongoose.Schema(
 orderSchema.plugin(tenantScoped);
 // Barcodes are unique per tenant: no cross-tenant collisions or enumeration through 409s.
 orderSchema.index({ tenantId: 1, barcode: 1 }, { unique: true });
+// Global: the public tracking page looks orders up by trackingId alone.
+orderSchema.index({ trackingId: 1 }, { unique: true });
 orderSchema.index({ tenantId: 1, isArchived: 1, createdAt: -1 });
 orderSchema.index({ tenantId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ tenantId: 1, courier: 1, status: 1 });

@@ -15,7 +15,7 @@ const merchantId = (req: Request) => new mongoose.Types.ObjectId(req.user!.merch
 const mine = (req: Request) => ({ merchant: merchantId(req) });
 
 // What a merchant may see about its orders (no courier details, fees or audit data).
-const FIELDS = "barcode merchantRef fullName phone address cost description status reason deliveredAt createdAt updatedAt";
+const FIELDS = "barcode trackingId merchantRef fullName phone address cost description status reason deliveredAt createdAt updatedAt";
 
 export async function listOwnOrders(req: Request, q: Parameters<typeof listOrders>[1], page: number, limit: number) {
   const { items, meta } = await listOrders(req, q, page, limit, mine(req));
@@ -24,7 +24,7 @@ export async function listOwnOrders(req: Request, q: Parameters<typeof listOrder
 }
 
 export async function getOwnOrder(req: Request, id: string) {
-  const order = await Order.findOne({ _id: id, ...scope(req), ...mine(req) }).select(FIELDS).lean();
+  const order = await Order.findOne({ _id: id, ...scope(req), ...mine(req) }).select(`${FIELDS} statusHistory.status statusHistory.at statusHistory.reason`).lean();
   if (!order) throw notFound("Order");
   return order;
 }

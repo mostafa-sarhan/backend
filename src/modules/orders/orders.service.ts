@@ -59,7 +59,7 @@ async function assertExists(req: Request, model: typeof Courier | typeof Merchan
 export async function listOrders(req: Request, q: ListQuery, page: number, limit: number, constraint: Record<string, unknown> = {}) {
   const filter = { ...buildOrderFilter(req, q), ...constraint };
   const [items, stats] = await Promise.all([
-    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+    populateRefs(req, Order.find(filter).select("-statusHistory").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
     Order.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: 1 }, totalCost: { $sum: "$cost" } } }]),
   ]);
   const total = stats[0]?.total ?? 0;
@@ -69,7 +69,7 @@ export async function listOrders(req: Request, q: ListQuery, page: number, limit
 export async function exportOrders(req: Request, q: ListQuery) {
   const filter = buildOrderFilter(req, q);
   const [items, total] = await Promise.all([
-    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).limit(config.exportMaxRows)).lean(),
+    populateRefs(req, Order.find(filter).select("-statusHistory").sort({ createdAt: -1 }).limit(config.exportMaxRows)).lean(),
     Order.countDocuments(filter),
   ]);
   return { items, meta: { total, truncated: total > items.length } };
@@ -98,7 +98,8 @@ export async function createOrder(req: Request, input: CreateOrderInput) {
   await assertOrderQuota(req.tenant!);
 
   return withTransaction(async () => {
-    const order = await createWithUniqueBarcode({ ...input, ...scope(req), status: input.courier ? "with_courier" : "pending" });
+    const status = input.courier ? "with_courier" : "pending";
+    const order = await createWithUniqueBarcode({ ...input, ...scope(req), status, statusHistory: [statusEvent(req, status)] });
     await recordAudit(req, { entity: "order", entityId: order._id, action: "CREATE", label: order.barcode, changes: { status: { from: null, to: order.status } } });
     return order;
   });
@@ -161,6 +162,20 @@ export async function feesFor(req: Request, merchantId: string | undefined) {
   return { courier: fees.courier, company: cache.get(merchantId) ?? fees.company };
 }
 
+// Timeline entry for a status change made in this request.
+export const statusEvent = (req: Request, status: string, reason?: string | null) => ({
+  status,
+  at: new Date(),
+  by: req.user ? { id: new mongoose.Types.ObjectId(req.user.id), email: req.user.email, role: req.user.role } : { role: "merchant_api" },
+  ...(reason && { reason }),
+});
+
+// $set plus a timeline $push when the status changes.
+const toUpdate = (req: Request, set: Record<string, unknown>) => ({
+  $set: set,
+  ...(typeof set.status === "string" && { $push: { statusHistory: statusEvent(req, set.status, set.reason as string | undefined) } }),
+});
+
 const conflict = () => new AppError(409, "CONFLICT", "The order was changed by someone else, reload and try again");
 
 export async function updateOrder(req: Request, id: string, input: OrderUpdate, constraint: Record<string, unknown> = {}) {
@@ -174,7 +189,7 @@ export async function updateOrder(req: Request, id: string, input: OrderUpdate, 
     // Optimistic concurrency: only apply if nobody changed the order since we read it.
     const updated = await Order.findOneAndUpdate(
       { _id: order._id, ...scope(req), updatedAt: order.updatedAt },
-      { $set: set },
+      toUpdate(req, set),
       { returnDocument: "after", runValidators: true }
     );
     if (!updated) throw conflict();
@@ -192,7 +207,7 @@ async function applyBulk(req: Request, orders: OrderDoc[], plans: Record<string,
   return withTransaction(async () => {
     const result = await Order.bulkWrite(
       orders.map((order, i) => ({
-        updateOne: { filter: { _id: order._id, ...scope(req), updatedAt: order.updatedAt }, update: { $set: plans[i] } },
+        updateOne: { filter: { _id: order._id, ...scope(req), updatedAt: order.updatedAt }, update: toUpdate(req, plans[i]) },
       }))
     );
     if (result.matchedCount !== orders.length) throw conflict();

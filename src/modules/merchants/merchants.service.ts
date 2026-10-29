@@ -4,6 +4,7 @@ import { Merchant, publicMerchant } from "./merchant.model";
 import { User } from "../users/user.model";
 import { createUser } from "../users/users.service";
 import { Order, createWithUniqueBarcode } from "../orders/order.model";
+import { statusEvent } from "../orders/orders.service";
 import { recordAudit, diff } from "../audit/audit.service";
 import { loadUsableTenant, assertOrderQuota } from "../tenants/tenants.service";
 import { generateApiKey, hashApiKey } from "./apiKeys";
@@ -95,6 +96,13 @@ export async function createMerchantOrder(req: Request, input: z.infer<typeof me
   }
   await assertOrderQuota(req.tenant!);
 
-  const order = await createWithUniqueBarcode({ ...data, ...scope(req), merchant: merchant._id, merchantRef, status: "pending" });
-  return { id: order._id, barcode: order.barcode, reference: order.merchantRef ?? null, status: order.status };
+  const order = await createWithUniqueBarcode({
+    ...data,
+    ...scope(req),
+    merchant: merchant._id,
+    merchantRef,
+    status: "pending",
+    statusHistory: [statusEvent(req, "pending")],
+  });
+  return { id: order._id, barcode: order.barcode, trackingId: order.trackingId, reference: order.merchantRef ?? null, status: order.status };
 }

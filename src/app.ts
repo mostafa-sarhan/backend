@@ -20,6 +20,7 @@ import reportRoutes from "./modules/reports/reports.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
 import courierAppRoutes from "./modules/courierApp/courierApp.routes";
 import merchantPortalRoutes from "./modules/merchantPortal/merchantPortal.routes";
+import trackingRoutes from "./modules/tracking/tracking.routes";
 import platformRoutes from "./modules/platform/platform.routes";
 import accessRequestRoutes from "./modules/platform/accessRequests.routes";
 
@@ -62,6 +63,7 @@ export function createApp() {
   app.use("/settings", settingsRoutes);
   app.use("/courier", courierAppRoutes);
   app.use("/portal", merchantPortalRoutes);
+  app.use("/track", trackingRoutes);
   app.use("/access-requests", accessRequestRoutes);
   app.use("/platform", platformRoutes);
 

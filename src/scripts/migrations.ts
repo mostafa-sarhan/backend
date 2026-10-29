@@ -4,6 +4,7 @@ type Db = mongoose.mongo.Db;
 import { hashPassword, isBcryptHash } from "../modules/auth/password";
 import { LEGACY_STATUS_MAP } from "../modules/orders/orderStatus";
 import { hashApiKey } from "../modules/merchants/apiKeys";
+import { generateTrackingId } from "../modules/orders/order.model";
 import { Order } from "../modules/orders/order.model";
 import { Courier } from "../modules/couriers/courier.model";
 import { Merchant } from "../modules/merchants/merchant.model";
@@ -209,6 +210,34 @@ export const migrations: Migration[] = [
         snapshotted += (await db.collection("orders").updateMany({ tenantId: t._id, status: "delivered", fees: null }, { $set: { fees: { courier, company } } })).modifiedCount;
       }
       return { snapshotted };
+    },
+  },
+  {
+    // Phase C (d): public tracking ids and the status timeline for existing orders.
+    // The timeline is rebuilt from the audit log where possible, else from the current status.
+    name: "tracking-ids-and-timeline",
+    async run(db) {
+      const orders = db.collection("orders");
+      let tracking = 0;
+      let timelines = 0;
+      for await (const o of orders.find({ $or: [{ trackingId: { $exists: false } }, { statusHistory: { $exists: false } }] })) {
+        const set: Record<string, unknown> = {};
+        if (!o.trackingId) {
+          let id = generateTrackingId();
+          while (await orders.findOne({ trackingId: id }, { projection: { _id: 1 } })) id = generateTrackingId();
+          set.trackingId = id;
+          tracking++;
+        }
+        if (!o.statusHistory) {
+          const events = await db.collection("auditevents").find({ tenantId: o.tenantId, entity: "order", entityId: o._id, "changes.status": { $exists: true } }).sort({ createdAt: 1 }).toArray();
+          set.statusHistory = events.length
+            ? events.map((e) => ({ status: e.changes.status.to, at: e.createdAt, by: { id: e.actor?.id, email: e.actor?.email } }))
+            : [{ status: o.status, at: o.updatedAt ?? o.createdAt ?? new Date() }];
+          timelines++;
+        }
+        await orders.updateOne({ _id: o._id }, { $set: set });
+      }
+      return { tracking, timelines };
     },
   },
   {

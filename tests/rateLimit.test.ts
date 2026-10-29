@@ -14,6 +14,7 @@ vi.hoisted(() => {
     RATE_LIMIT_MERCHANT_KEY_PER_MIN: "2",
     RATE_LIMIT_ACCESS_REQUEST_IP_PER_HOUR: "2",
     RATE_LIMIT_EXPORT_USER_PER_HOUR: "2",
+    RATE_LIMIT_TRACKING_IP_PER_MIN: "3",
     LOGIN_LOCK_AFTER_FAILURES: "3",
     PLATFORM_LOGIN_LOCK_AFTER_FAILURES: "2",
   });
@@ -149,6 +150,14 @@ describe("API limits", () => {
     const admin = await loginAs("admin");
     for (let i = 0; i < 2; i++) expect((await admin.get("/orders/export")).status).toBe(200);
     expect429(await admin.get("/orders/export"));
+  });
+});
+
+describe("public tracking", () => {
+  it("strict per IP (against trackingId enumeration)", async () => {
+    const ip = newIp();
+    for (let i = 0; i < 3; i++) expect((await request(app).get("/track/ABCDEFGHJKMNPQRSTUVW").set(from(ip))).status).toBe(404);
+    expect429(await request(app).get("/track/ABCDEFGHJKMNPQRSTUVW").set(from(ip)));
   });
 });
 
