@@ -1,27 +1,21 @@
-// The one settlement formula (fees per delivered order).
-//   courier commission = delivered × courier fee   (the shipping company's own cost)
-//   company commission = delivered × company fee   (what the merchant pays for shipping)
-//   merchant net       = delivered total − the deducted commissions
-// Which commissions are deducted from the merchant becomes a per-tenant setting in Phase C;
-// the default deducts the company fee only.
-export interface Fees {
+// Settlement rules. Commissions come from the fee snapshot stored on each delivered order
+// (or count × a "what-if" fee an admin enters). Which commissions are deducted from the
+// merchant is the tenant setting `merchantDeductions` (default: company fee only).
+//   merchant net = delivered total − deducted commissions
+//   after courier = delivered total − courier commission (what the company keeps before paying itself)
+export type MerchantDeduction = "company" | "courier";
+export const DEFAULT_MERCHANT_DEDUCTIONS: readonly MerchantDeduction[] = ["company"];
+
+export interface Commissions {
   courier: number;
   company: number;
 }
 
-export type MerchantDeduction = "company" | "courier";
-export const DEFAULT_MERCHANT_DEDUCTIONS: readonly MerchantDeduction[] = ["company"];
-
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function settlement(
-  deliveredCount: number,
-  deliveredTotal: number,
-  fees: Fees,
-  deductions: readonly MerchantDeduction[] = DEFAULT_MERCHANT_DEDUCTIONS
-) {
-  const courierCommission = round2(deliveredCount * fees.courier);
-  const companyCommission = round2(deliveredCount * fees.company);
+export function settlement(deliveredCount: number, deliveredTotal: number, commissions: Commissions, deductions: readonly MerchantDeduction[] = DEFAULT_MERCHANT_DEDUCTIONS) {
+  const courierCommission = round2(commissions.courier);
+  const companyCommission = round2(commissions.company);
   const deducted = (deductions.includes("company") ? companyCommission : 0) + (deductions.includes("courier") ? courierCommission : 0);
   return {
     deliveredCount,
@@ -33,10 +27,14 @@ export function settlement(
   };
 }
 
+export type StatusRow = { status: string; count: number; amount: number; courierFees?: number; companyFees?: number };
 export type StatusTotals = Record<string, { count: number; amount: number }>;
 
-// Turns [{ status, count, amount }] rows into totals by status plus the settlement.
-export function summarize(rows: { status: string; count: number; amount: number }[], fees: Fees) {
+// What-if fees replace the snapshots: count × fee.
+export type FeeOverrides = { courierFee?: number; companyFee?: number };
+
+// Totals by status plus the settlement for the delivered orders.
+export function summarize(rows: StatusRow[], deductions: readonly MerchantDeduction[] = DEFAULT_MERCHANT_DEDUCTIONS, overrides: FeeOverrides = {}) {
   const byStatus: StatusTotals = {};
   let count = 0;
   let amount = 0;
@@ -45,6 +43,10 @@ export function summarize(rows: { status: string; count: number; amount: number 
     count += r.count;
     amount += r.amount;
   }
-  const delivered = byStatus.delivered ?? { count: 0, amount: 0 };
-  return { total: { count, amount: round2(amount) }, byStatus, money: settlement(delivered.count, delivered.amount, fees) };
+  const delivered = rows.find((r) => r.status === "delivered") ?? { count: 0, amount: 0, courierFees: 0, companyFees: 0 };
+  const commissions = {
+    courier: overrides.courierFee !== undefined ? delivered.count * overrides.courierFee : delivered.courierFees ?? 0,
+    company: overrides.companyFee !== undefined ? delivered.count * overrides.companyFee : delivered.companyFees ?? 0,
+  };
+  return { total: { count, amount: round2(amount) }, byStatus, money: settlement(delivered.count, delivered.amount, commissions, deductions) };
 }

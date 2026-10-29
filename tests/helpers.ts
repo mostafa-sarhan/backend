@@ -38,8 +38,9 @@ export function useDb() {
 }
 
 let slugCounter = 0;
+// Test tenants charge courier 20 / company 10 per delivered order.
 export const createTenant = (name = "Acme Shipping", extra: Record<string, unknown> = {}) =>
-  Tenant.create({ name, slug: `t-${++slugCounter}`, plan: "pro", status: "active", ...extra });
+  Tenant.create({ name, slug: `t-${++slugCounter}`, plan: "pro", status: "active", settings: { fees: { courier: 20, company: 10 } }, ...extra });
 
 // The tenant used when a test doesn't care which one.
 export const getTenant = async () => (defaultTenant ||= await createTenant());

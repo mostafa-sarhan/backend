@@ -19,6 +19,12 @@ const orderSchema = new mongoose.Schema(
     isArchived: { type: Boolean, default: false, required: true },
     // When the order reached a final status (delivered / returned / refused).
     deliveredAt: { type: Date, default: null },
+    // Fees in force when the order was delivered (null until then). Reports add these up,
+    // so changing the tenant's or merchant's fees never rewrites past statements.
+    fees: {
+      type: new mongoose.Schema({ courier: { type: Number, min: 0, required: true }, company: { type: Number, min: 0, required: true } }, { _id: false }),
+      default: null,
+    },
     barcode: { type: String, required: true, default: generateBarcode },
     // The merchant's own order id (merchant API); unique per merchant.
     merchantRef: { type: String, trim: true, maxlength: 60 },

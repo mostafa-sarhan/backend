@@ -12,7 +12,7 @@ router.post("/order", limits.merchantApi, c.apiKeyAuth, c.createOrder);
 router.get("/options", requireAuth, staffOnly, c.options);
 router.get("/", requireAuth, adminOnly, c.list);
 router.post("/", requireAuth, adminOnly, c.create);
-router.patch("/:id", requireAuth, adminOnly, c.rename);
+router.patch("/:id", requireAuth, adminOnly, c.update);
 router.post("/:id/api-key", requireAuth, adminOnly, c.rotateKey);
 router.delete("/:id/api-key", requireAuth, adminOnly, c.revokeKey);
 

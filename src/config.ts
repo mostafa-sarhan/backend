@@ -46,11 +46,6 @@ export const config = {
   accessTokenTtlSec: 15 * 60,
   refreshTokenTtlSec: 7 * 24 * 60 * 60,
   bcryptRounds: 12,
-  // Default fees until they are stored per company (Phase C).
-  fees: {
-    courier: Number(process.env.DEFAULT_COURIER_FEE ?? 20),
-    company: Number(process.env.DEFAULT_COMPANY_FEE ?? 20),
-  },
   exportMaxRows: Number(process.env.EXPORT_MAX_ROWS) || 5000,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   bodyLimit: process.env.BODY_LIMIT || "100kb",

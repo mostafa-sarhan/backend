@@ -194,6 +194,24 @@ export const migrations: Migration[] = [
     },
   },
   {
+    // Phase C (b): delivered orders get a fee snapshot from their tenant's settings
+    // (and the merchant's company-fee override), so reports stop depending on current fees.
+    name: "snapshot-delivered-fees",
+    async run(db) {
+      let snapshotted = 0;
+      for await (const t of db.collection("tenants").find({}, { projection: { settings: 1 } })) {
+        const courier = t.settings?.fees?.courier ?? 20;
+        const company = t.settings?.fees?.company ?? 20;
+        const overrides = await db.collection("merchants").find({ tenantId: t._id, companyFee: { $type: "number" } }).toArray();
+        for (const m of overrides) {
+          snapshotted += (await db.collection("orders").updateMany({ tenantId: t._id, merchant: m._id, status: "delivered", fees: null }, { $set: { fees: { courier, company: m.companyFee } } })).modifiedCount;
+        }
+        snapshotted += (await db.collection("orders").updateMany({ tenantId: t._id, status: "delivered", fees: null }, { $set: { fees: { courier, company } } })).modifiedCount;
+      }
+      return { snapshotted };
+    },
+  },
+  {
     // Create the indexes declared in the schemas and drop ones that are no longer declared.
     name: "sync-indexes",
     async run() {

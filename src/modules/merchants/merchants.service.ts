@@ -2,7 +2,7 @@ import { Request } from "express";
 import { z } from "zod";
 import { Merchant, publicMerchant } from "./merchant.model";
 import { Order, createWithUniqueBarcode } from "../orders/order.model";
-import { recordAudit } from "../audit/audit.service";
+import { recordAudit, diff } from "../audit/audit.service";
 import { loadUsableTenant, assertOrderQuota } from "../tenants/tenants.service";
 import { generateApiKey, hashApiKey } from "./apiKeys";
 import { AppError, notFound } from "../../lib/errors";
@@ -37,14 +37,16 @@ export async function createMerchant(req: Request, name: string, withApiKey: boo
   });
 }
 
-export const renameMerchant = (req: Request, id: string, name: string) =>
+// Name and company-fee override. A new fee applies to orders delivered from now on.
+export const updateMerchant = (req: Request, id: string, input: { name?: string; companyFee?: number | null }) =>
   withTransaction(async () => {
     const merchant = await Merchant.findOne({ _id: id, ...scope(req) });
     if (!merchant) throw notFound("Merchant");
-    const oldName = merchant.name;
-    merchant.name = name;
+    const before = { name: merchant.name, companyFee: merchant.companyFee ?? null };
+    merchant.set(input);
     await merchant.save();
-    await recordAudit(req, { entity: "merchant", entityId: merchant._id, action: "RENAME", label: name, changes: { name: { from: oldName, to: name } } });
+    const changes = diff(before, { name: merchant.name, companyFee: merchant.companyFee ?? null });
+    await recordAudit(req, { entity: "merchant", entityId: merchant._id, action: "UPDATE", label: merchant.name, changes });
     return publicMerchant(merchant);
   });
 

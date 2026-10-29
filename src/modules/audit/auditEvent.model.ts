@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { tenantScoped, tenantIdField } from "../../lib/tenantPlugin";
 
-export const AUDIT_ENTITIES = ["user", "order", "merchant", "courier"] as const;
+export const AUDIT_ENTITIES = ["user", "order", "merchant", "courier", "settings"] as const;
 
 // Who changed what. `changes` is { field: { from, to } }.
 const auditEventSchema = new mongoose.Schema(

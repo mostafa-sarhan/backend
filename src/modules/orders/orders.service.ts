@@ -13,10 +13,12 @@ import { AppError, forbidden, notFound } from "../../lib/errors";
 import { scope } from "../../lib/scope";
 import { withTransaction } from "../../lib/transaction";
 import { config } from "../../config";
+import { tenantSettings } from "../tenants/tenants.service";
+import { dayStart, dayEnd } from "../../lib/time";
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Mongo filter for list/export/report queries. Days are UTC.
+// Mongo filter for list/export/report queries. Days are in the tenant's timezone.
 export function buildOrderFilter(req: Request, q: ListQuery) {
   const filter: Record<string, unknown> = { ...scope(req) };
   if (q.archived !== "all") filter.isArchived = q.archived === "true";
@@ -31,9 +33,10 @@ export function buildOrderFilter(req: Request, q: ListQuery) {
   const from = q.from ?? q.date;
   const to = q.to ?? q.date;
   if (from || to) {
+    const tz = tenantSettings(req.tenant!).timezone;
     filter.createdAt = {
-      ...(from && { $gte: new Date(`${from}T00:00:00Z`) }),
-      ...(to && { $lte: new Date(`${to}T23:59:59.999Z`) }),
+      ...(from && { $gte: dayStart(from, tz) }),
+      ...(to && { $lte: dayEnd(to, tz) }),
     };
   }
   return filter;
@@ -133,10 +136,27 @@ export async function planUpdate(req: Request, order: OrderDoc, input: OrderUpda
       set.deliveredAt = null;
       set.isArchived = false;
     }
+    // Lock in the fees that apply right now; drop them if a delivery is corrected.
+    if (to === "delivered") set.fees = await feesFor(req, (input.merchant ?? order.merchant)?.toString());
+    if (from === "delivered") set.fees = null;
   } else {
     delete set.status;
   }
   return set;
+}
+
+// Courier fee from the tenant; company fee from the merchant's override, else the tenant.
+// Cached per request: a bulk action looks each merchant up once.
+const merchantFeeCache = new WeakMap<Request, Map<string, number | null>>();
+export async function feesFor(req: Request, merchantId: string | undefined) {
+  const { fees } = tenantSettings(req.tenant!);
+  if (!merchantId) return { ...fees };
+  const cache = merchantFeeCache.get(req) ?? merchantFeeCache.set(req, new Map()).get(req)!;
+  if (!cache.has(merchantId)) {
+    const m = await Merchant.findOne({ _id: merchantId, ...scope(req) }).select("companyFee").lean();
+    cache.set(merchantId, m?.companyFee ?? null);
+  }
+  return { courier: fees.courier, company: cache.get(merchantId) ?? fees.company };
 }
 
 const conflict = () => new AppError(409, "CONFLICT", "The order was changed by someone else, reload and try again");
