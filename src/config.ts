@@ -49,6 +49,10 @@ export const config = {
   exportMaxRows: Number(process.env.EXPORT_MAX_ROWS) || 5000,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   bodyLimit: process.env.BODY_LIMIT || "100kb",
+  import: {
+    maxBytes: num("IMPORT_MAX_BYTES", 2 * 1024 * 1024),
+    maxRows: num("IMPORT_MAX_ROWS", 1000),
+  },
   rateLimits: {
     globalPer15Min: num("RATE_LIMIT_GLOBAL_PER_15MIN", 1000),
     loginIpPer15Min: num("RATE_LIMIT_LOGIN_IP_PER_15MIN", 20),

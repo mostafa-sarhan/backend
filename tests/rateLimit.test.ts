@@ -15,6 +15,7 @@ vi.hoisted(() => {
     RATE_LIMIT_ACCESS_REQUEST_IP_PER_HOUR: "2",
     RATE_LIMIT_EXPORT_USER_PER_HOUR: "2",
     RATE_LIMIT_TRACKING_IP_PER_MIN: "3",
+    RATE_LIMIT_IMPORT_USER_PER_HOUR: "2",
     LOGIN_LOCK_AFTER_FAILURES: "3",
     PLATFORM_LOGIN_LOCK_AFTER_FAILURES: "2",
   });
@@ -144,6 +145,12 @@ describe("API limits", () => {
     const order = { fullName: "C", phone: "01001234567", address: "x", cost: 1 };
     for (let i = 0; i < 2; i++) expect((await request(app).post("/merchants/order").set(from(newIp())).set("api-key", key).send(order)).status).toBe(201);
     expect429(await request(app).post("/merchants/order").set(from(newIp())).set("api-key", key).send(order));
+  });
+
+  it("import per user (checked before the file is read)", async () => {
+    const admin = await loginAs("admin");
+    for (let i = 0; i < 2; i++) expect((await admin.post("/orders/import")).status).toBe(400); // no file
+    expect429(await admin.post("/orders/import"));
   });
 
   it("export per user", async () => {

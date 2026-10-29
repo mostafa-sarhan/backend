@@ -87,6 +87,22 @@ export async function freeBarcode(tenantId: mongoose.Types.ObjectId, attempts = 
   throw new Error("Could not generate a free barcode");
 }
 
+// `n` distinct barcodes not used in the tenant (for imports).
+export async function freeBarcodes(tenantId: mongoose.Types.ObjectId, n: number) {
+  const picked = new Set<string>();
+  for (let round = 0; picked.size < n; round++) {
+    if (round > 20) throw new Error("Could not generate free barcodes");
+    const candidates = new Set<string>();
+    while (candidates.size < n - picked.size) {
+      const b = generateBarcode();
+      if (!picked.has(b)) candidates.add(b);
+    }
+    const taken = new Set((await Order.find({ tenantId, barcode: { $in: [...candidates] } }).select("barcode").lean()).map((o) => o.barcode));
+    for (const b of candidates) if (!taken.has(b)) picked.add(b);
+  }
+  return [...picked];
+}
+
 export async function createWithUniqueBarcode(data: Record<string, unknown> & { tenantId: mongoose.Types.ObjectId }) {
   const order = new Order({ ...data, barcode: await freeBarcode(data.tenantId) });
   await order.save();

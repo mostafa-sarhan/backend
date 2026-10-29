@@ -21,6 +21,7 @@ import settingsRoutes from "./modules/settings/settings.routes";
 import courierAppRoutes from "./modules/courierApp/courierApp.routes";
 import merchantPortalRoutes from "./modules/merchantPortal/merchantPortal.routes";
 import trackingRoutes from "./modules/tracking/tracking.routes";
+import importRoutes from "./modules/import/import.routes";
 import platformRoutes from "./modules/platform/platform.routes";
 import accessRequestRoutes from "./modules/platform/accessRequests.routes";
 
@@ -56,6 +57,7 @@ export function createApp() {
 
   app.use("/auth", authRoutes);
   app.use("/users", userRoutes);
+  app.use("/orders/import", importRoutes); // before /orders/:id
   app.use("/orders", orderRoutes);
   app.use("/couriers", courierRoutes);
   app.use("/merchants", merchantRoutes);
