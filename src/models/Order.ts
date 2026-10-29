@@ -1,11 +1,13 @@
 import mongoose, { HydratedDocument, InferSchemaType } from "mongoose";
 import { randomInt } from "crypto";
 import { ORDER_STATUSES } from "../domain/orderStatus";
+import { tenantScoped, tenantIdField } from "../lib/tenantPlugin";
 
 export const generateBarcode = () => randomInt(10_000_000, 100_000_000).toString();
 
 const orderSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     fullName: { type: String, required: true, trim: true, maxlength: 100 },
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     address: { type: String, required: true, trim: true, maxlength: 300 },
@@ -24,15 +26,19 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Phase C: prefix every index with tenantId (barcode stays globally unique for scanning).
-orderSchema.index({ barcode: 1 }, { unique: true });
-orderSchema.index({ isArchived: 1, createdAt: -1 });
-orderSchema.index({ status: 1, createdAt: -1 });
-orderSchema.index({ courier: 1, status: 1 });
-orderSchema.index({ merchant: 1, createdAt: -1 });
-orderSchema.index({ phone: 1 });
-orderSchema.index({ isArchived: 1, status: 1, deliveredAt: 1 }); // archive job
-orderSchema.index({ merchant: 1, merchantRef: 1 }, { unique: true, partialFilterExpression: { merchantRef: { $type: "string" } } });
+orderSchema.plugin(tenantScoped);
+// Barcodes are unique per tenant: no cross-tenant collisions or enumeration through 409s.
+orderSchema.index({ tenantId: 1, barcode: 1 }, { unique: true });
+orderSchema.index({ tenantId: 1, isArchived: 1, createdAt: -1 });
+orderSchema.index({ tenantId: 1, status: 1, createdAt: -1 });
+orderSchema.index({ tenantId: 1, courier: 1, status: 1 });
+orderSchema.index({ tenantId: 1, merchant: 1, createdAt: -1 });
+orderSchema.index({ tenantId: 1, phone: 1 });
+orderSchema.index({ tenantId: 1, isArchived: 1, status: 1, deliveredAt: 1 }); // archive job
+orderSchema.index(
+  { tenantId: 1, merchant: 1, merchantRef: 1 },
+  { unique: true, partialFilterExpression: { merchantRef: { $type: "string" } } }
+);
 
 export type OrderDoc = HydratedDocument<InferSchemaType<typeof orderSchema>>;
 export const Order = mongoose.model("Order", orderSchema);
@@ -42,7 +48,7 @@ export const isDuplicateBarcode = (err: unknown) => {
   return e?.code === 11000 && !!e.keyPattern?.barcode;
 };
 
-// Creates an order with a generated barcode, retrying on the rare collision.
+// Creates an order with a barcode generated unique within its tenant, retrying on the rare collision.
 export async function createWithUniqueBarcode(data: Record<string, unknown>, attempts = 5) {
   for (let i = 0; ; i++) {
     try {

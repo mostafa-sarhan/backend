@@ -8,6 +8,7 @@ export const ORDER_UPDATE_FIELDS: Record<Role, readonly string[]> = {
   employee: ["status", "courier", "description"],
   // Admins can also correct customer and financial data.
   admin: ["status", "courier", "description", "fullName", "phone", "address", "cost", "merchant"],
+  owner: ["status", "courier", "description", "fullName", "phone", "address", "cost", "merchant"],
 };
 
 export const forbiddenFields = (role: Role, fields: string[]) =>

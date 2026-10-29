@@ -1,7 +1,9 @@
 import { Request } from "express";
+import { AppError } from "./errors";
 
-// Base filter for every tenant-owned query. Phase C adds `tenantId` here (and as the
-// first key of each compound index), so no query needs to change individually.
-export function scope(_req?: Request): Record<string, unknown> {
-  return {};
+// Base filter for every tenant-owned query. Throws if the request has no tenant, so a route that
+// forgot authentication can't fall back to "all tenants".
+export function scope(req: Request) {
+  if (!req.tenant) throw new AppError(500, "INTERNAL_ERROR", "Tenant context missing");
+  return { tenantId: req.tenant._id };
 }

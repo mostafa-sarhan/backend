@@ -1,26 +1,30 @@
 import cron from "node-cron";
 import { Order } from "../models/Order";
+import { Tenant } from "../models/Tenant";
 import { FINAL_STATUSES } from "../domain/orderStatus";
 import { logger } from "../logger";
 
-const ARCHIVE_AFTER_DAYS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Archives orders that reached a final status more than 3 days ago.
+// Archives each tenant's orders that reached a final status more than `archiveAfterDays` ago.
 export async function archiveOrders(now = new Date()) {
-  const cutoff = new Date(now.getTime() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
-
-  const result = await Order.updateMany(
-    {
-      isArchived: false,
-      status: { $in: FINAL_STATUSES },
-      // Orders closed before deliveredAt existed fall back to updatedAt.
-      $or: [{ deliveredAt: { $lte: cutoff } }, { deliveredAt: null, updatedAt: { $lte: cutoff } }],
-    },
-    { $set: { isArchived: true } },
-    { timestamps: false }
-  );
-
-  return result.modifiedCount;
+  let total = 0;
+  for await (const tenant of Tenant.find().select("settings.archiveAfterDays")) {
+    const cutoff = new Date(now.getTime() - (tenant.settings?.archiveAfterDays ?? 3) * DAY_MS);
+    const result = await Order.updateMany(
+      {
+        tenantId: tenant._id,
+        isArchived: false,
+        status: { $in: FINAL_STATUSES },
+        // Orders closed before deliveredAt existed fall back to updatedAt.
+        $or: [{ deliveredAt: { $lte: cutoff } }, { deliveredAt: null, updatedAt: { $lte: cutoff } }],
+      },
+      { $set: { isArchived: true } },
+      { timestamps: false }
+    );
+    total += result.modifiedCount;
+  }
+  return total;
 }
 
 export function startArchiveJob() {

@@ -8,16 +8,21 @@ import { ok, created } from "../lib/respond";
 import { str, money, idParams } from "../lib/validate";
 import { scope } from "../lib/scope";
 import { generateApiKey, hashApiKey } from "../lib/apiKeys";
+import { UNSCOPED } from "../lib/tenantPlugin";
+import { loadUsableTenant, assertOrderQuota } from "../services/tenants";
 import { recordAudit } from "../services/audit";
 
 const router = Router();
 
 // ---------------- Merchant API-key auth ----------------
+// The key identifies merchant and tenant (keys are globally unique hashes). A suspended or
+// expired tenant blocks its merchants' keys too.
 export const merchantAuth: RequestHandler = async (req, _res, next) => {
   const apiKey = req.headers["api-key"];
   if (typeof apiKey !== "string" || !apiKey) return next(new AppError(401, "UNAUTHENTICATED", "API key required"));
-  const merchant = await Merchant.findOne({ apiKeyHash: hashApiKey(apiKey), apiKeyRevokedAt: null });
+  const merchant = await Merchant.findOne({ apiKeyHash: hashApiKey(apiKey), apiKeyRevokedAt: null }).setOptions(UNSCOPED);
   if (!merchant) return next(new AppError(401, "UNAUTHENTICATED", "Invalid API key"));
+  req.tenant = await loadUsableTenant(merchant.tenantId);
   req.merchant = merchant;
   next();
 };
@@ -105,11 +110,12 @@ router.post("/order", merchantAuth, async (req, res) => {
   const merchant = req.merchant!;
   const merchantRef = reference ?? barcode;
 
-  if (merchantRef && (await Order.exists({ merchant: merchant._id, merchantRef }))) {
+  if (merchantRef && (await Order.exists({ ...scope(req), merchant: merchant._id, merchantRef }))) {
     throw new AppError(409, "DUPLICATE", "You already sent an order with this reference");
   }
+  await assertOrderQuota(req.tenant!);
 
-  const order = await createWithUniqueBarcode({ ...data, merchant: merchant._id, merchantRef, status: "pending" });
+  const order = await createWithUniqueBarcode({ ...data, ...scope(req), merchant: merchant._id, merchantRef, status: "pending" });
   created(res, { id: order._id, barcode: order.barcode, reference: order.merchantRef ?? null, status: order.status });
 });
 

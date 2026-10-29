@@ -1,7 +1,9 @@
 import mongoose, { HydratedDocument, InferSchemaType } from "mongoose";
+import { tenantScoped, tenantIdField } from "../lib/tenantPlugin";
 
 const merchantSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     name: { type: String, required: true, trim: true, maxlength: 100 },
     // API key: only its SHA-256 is stored; the key itself is shown once on creation/rotation.
     apiKeyHash: { type: String, select: false },
@@ -12,8 +14,9 @@ const merchantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Phase C: becomes { tenantId: 1, name: 1 }.
-merchantSchema.index({ name: 1 }, { unique: true });
+merchantSchema.plugin(tenantScoped);
+merchantSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+// Globally unique: the key alone identifies merchant and tenant.
 merchantSchema.index({ apiKeyHash: 1 }, { unique: true, sparse: true });
 
 export type MerchantDocument = HydratedDocument<InferSchemaType<typeof merchantSchema>>;

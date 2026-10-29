@@ -17,6 +17,8 @@ import orderRoutes from "./routes/orders";
 import courierRoutes from "./routes/couriers";
 import merchantRoutes from "./routes/merchants";
 import reportRoutes from "./routes/reports";
+import platformRoutes from "./routes/platform";
+import accessRequestRoutes from "./routes/accessRequests";
 
 export function createApp() {
   const app = express();
@@ -61,6 +63,8 @@ export function createApp() {
   app.use("/couriers", courierRoutes);
   app.use("/merchants", merchantRoutes);
   app.use("/reports", reportRoutes);
+  app.use("/access-requests", accessRequestRoutes);
+  app.use("/platform", platformRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

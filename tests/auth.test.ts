@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import { app, useDb, createUser, loginAs, PASSWORD } from "./helpers";
+import { app, useDb, createUser, loginAs, PASSWORD, getTenant, UNSCOPED } from "./helpers";
 import { User } from "../src/models/User";
 
 useDb();
@@ -33,7 +33,7 @@ describe("login", () => {
   });
 
   it("no longer accepts plain-text passwords stored in the DB", async () => {
-    await User.collection.insertOne({ email: "old@test.com", password: "plain123", role: "admin", tokenVersion: 0 });
+    await User.collection.insertOne({ tenantId: (await getTenant())._id, email: "old@test.com", password: "plain123", role: "admin", tokenVersion: 0 });
     const res = await request(app).post("/auth/login").send({ email: "old@test.com", password: "plain123" });
     expect(res.status).toBe(401);
   });
@@ -54,15 +54,17 @@ describe("access token", () => {
 
   it("is ignored in an Authorization header (cookies only)", async () => {
     const user = await createUser("admin");
-    const token = jwt.sign({ role: "admin", tv: 0 }, "test-secret", { subject: user.id, issuer: "shipping-api" });
+    const token = jwt.sign({ role: "admin", tv: 0, tid: user.tenantId.toString() }, "test-secret", { subject: user.id, issuer: "shipping-api", audience: "tenant" });
     const res = await request(app).get("/auth/me").set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(401);
   });
 
   it("must be HS256: alg=none and other secrets are rejected", async () => {
     const user = await createUser("admin");
-    const none = jwt.sign({ role: "admin", tv: 0 }, "", { algorithm: "none", subject: user.id, issuer: "shipping-api" });
-    const other = jwt.sign({ role: "admin", tv: 0 }, "wrong", { algorithm: "HS256", subject: user.id, issuer: "shipping-api" });
+    const claims = { role: "admin", tv: 0, tid: user.tenantId.toString() };
+    const opts = { subject: user.id, issuer: "shipping-api", audience: "tenant" };
+    const none = jwt.sign(claims, "", { ...opts, algorithm: "none" });
+    const other = jwt.sign(claims, "wrong", { ...opts, algorithm: "HS256" });
     for (const token of [none, other]) {
       const res = await request(app).get("/auth/me").set("Cookie", `access_token=${token}`);
       expect(res.status).toBe(401);
@@ -111,7 +113,7 @@ describe("refresh + revocation", () => {
   it("password change logs out the user's existing sessions", async () => {
     const admin = await loginAs("admin");
     const employee = await loginAs("employee");
-    const target = await User.findOne({ email: "employee@test.com" });
+    const target = await User.findOne({ email: "employee@test.com" }).setOptions(UNSCOPED);
 
     expect((await employee.get("/auth/me")).status).toBe(200);
     const change = await admin.put(`/users/${target!.id}/password`).send({ newPassword: "An0therGoodOne" });
@@ -122,7 +124,7 @@ describe("refresh + revocation", () => {
   it("role change logs out the user's existing sessions", async () => {
     const admin = await loginAs("admin");
     const employee = await loginAs("employee");
-    const target = await User.findOne({ email: "employee@test.com" });
+    const target = await User.findOne({ email: "employee@test.com" }).setOptions(UNSCOPED);
 
     await admin.put(`/users/${target!.id}/role`).send({ role: "admin" });
     expect((await employee.get("/auth/me")).status).toBe(401);
@@ -140,7 +142,7 @@ describe("users", () => {
   it("stores bcrypt cost 12", async () => {
     const admin = await loginAs("admin");
     await admin.post("/users").send({ email: "new@test.com", password: "G00dPassword!", role: "employee" });
-    const user = await User.findOne({ email: "new@test.com" });
+    const user = await User.findOne({ email: "new@test.com" }).setOptions(UNSCOPED);
     expect(user!.password).toMatch(/^\$2[aby]\$12\$/);
   });
 
@@ -152,7 +154,7 @@ describe("users", () => {
 
   it("won't let an admin demote themselves or the last admin", async () => {
     const admin = await loginAs("admin");
-    const me = await User.findOne({ email: "admin@test.com" });
+    const me = await User.findOne({ email: "admin@test.com" }).setOptions(UNSCOPED);
     const res = await admin.put(`/users/${me!.id}/role`).send({ role: "employee" });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("LAST_ADMIN");

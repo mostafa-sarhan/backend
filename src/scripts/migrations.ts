@@ -10,6 +10,10 @@ import { Merchant } from "../models/Merchant";
 import { User } from "../models/User";
 import { RefreshToken } from "../models/RefreshToken";
 import { AuditEvent } from "../models/AuditEvent";
+import { Tenant } from "../models/Tenant";
+import { PlatformAdmin } from "../models/PlatformAdmin";
+import { PlatformAuditEvent } from "../models/PlatformAuditEvent";
+import { AccessRequest } from "../models/AccessRequest";
 
 export interface Migration {
   name: string;
@@ -139,10 +143,63 @@ export const migrations: Migration[] = [
     },
   },
   {
+    // Phase C: existing single-company data becomes the first tenant (active, unlimited plan).
+    // The oldest admin becomes its owner. Old refresh tokens (pre-realm) are dropped: users log in again.
+    name: "default-tenant",
+    async run(db) {
+      const collections = ["users", "orders", "deliveries", "merchants", "auditevents"];
+      const untenanted = async () => {
+        let n = 0;
+        for (const c of collections) n += await db.collection(c).countDocuments({ tenantId: { $exists: false } });
+        return n;
+      };
+      if (!(await untenanted())) return { assigned: 0, droppedTokens: 0 };
+
+      const tenants = db.collection("tenants");
+      let tenant = await tenants.findOne({ slug: "default" });
+      if (!tenant) {
+        const now = new Date();
+        const doc = {
+          name: process.env.DEFAULT_TENANT_NAME || "Default company",
+          slug: "default",
+          plan: "pro",
+          status: "active",
+          trialEndsAt: null,
+          limits: { maxUsers: null, maxOrdersPerMonth: null },
+          settings: {
+            fees: { courier: Number(process.env.DEFAULT_COURIER_FEE ?? 20), company: Number(process.env.DEFAULT_COMPANY_FEE ?? 20) },
+            merchantDeductions: ["company"],
+            archiveAfterDays: 3,
+            timezone: "Africa/Cairo",
+            currency: "EGP",
+          },
+          createdAt: now,
+          updatedAt: now,
+        };
+        tenant = { _id: (await tenants.insertOne(doc)).insertedId, ...doc };
+      }
+
+      let assigned = 0;
+      for (const c of collections) {
+        assigned += (await db.collection(c).updateMany({ tenantId: { $exists: false } }, { $set: { tenantId: tenant._id } })).modifiedCount;
+      }
+
+      const users = db.collection("users");
+      if (!(await users.countDocuments({ tenantId: tenant._id, role: "owner" }))) {
+        const first = await users.find({ tenantId: tenant._id, role: "admin" }).sort({ createdAt: 1, _id: 1 }).limit(1).next();
+        if (first) await users.updateOne({ _id: first._id }, { $set: { role: "owner" } });
+      }
+      const droppedTokens = (await db.collection("refreshtokens").deleteMany({ realm: { $exists: false } })).deletedCount;
+      return { assigned, droppedTokens };
+    },
+  },
+  {
     // Create the indexes declared in the schemas and drop ones that are no longer declared.
     name: "sync-indexes",
     async run() {
-      for (const model of [Order, Courier, Merchant, User, RefreshToken, AuditEvent]) await model.syncIndexes();
+      for (const model of [Tenant, Order, Courier, Merchant, User, RefreshToken, AuditEvent, PlatformAdmin, PlatformAuditEvent, AccessRequest]) {
+        await model.syncIndexes();
+      }
       return {};
     },
   },

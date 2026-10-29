@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { app, useDb, loginAs, seedRefs, orderInput } from "./helpers";
+import { app, useDb, loginAs, seedRefs, orderInput, UNSCOPED } from "./helpers";
 import { Merchant } from "../src/models/Merchant";
 
 useDb();
@@ -70,7 +70,7 @@ describe("merchant API keys", () => {
 
     const list = await admin.get("/merchants");
     expect(JSON.stringify(list.body)).not.toContain(key);
-    const stored = await Merchant.findOne({ name: "Shop" }).select("+apiKeyHash").lean();
+    const stored = await Merchant.findOne({ name: "Shop" }).setOptions(UNSCOPED).select("+apiKeyHash").lean();
     expect(stored!.apiKeyHash).not.toBe(key);
 
     const order = { fullName: "C", phone: "01001234567", address: "Giza", cost: 0, reference: "A-1" };

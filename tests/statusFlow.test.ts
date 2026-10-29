@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { useDb, loginAs, seedRefs, orderInput } from "./helpers";
+import { useDb, loginAs, seedRefs, orderInput, getTenant, UNSCOPED } from "./helpers";
 import { canTransition, ORDER_STATUSES } from "../src/domain/orderStatus";
 import { archiveOrders } from "../src/jobs/archiveOrders";
 import { Order } from "../src/models/Order";
@@ -78,7 +78,7 @@ describe("status flow over the API", () => {
     const res = await employee.post("/orders/bulk/assign").send({ orderIds: [a._id, b._id], courier: refs.courier });
     expect(res.status).toBe(409);
     expect(res.body.error.details).toHaveLength(1);
-    expect((await Order.findById(a._id))!.status).toBe("pending");
+    expect((await Order.findById(a._id).setOptions(UNSCOPED))!.status).toBe("pending");
   });
 
   it("bulk status saves a courier's batch in one call", async () => {
@@ -94,7 +94,7 @@ describe("status flow over the API", () => {
       ],
     });
     expect(res.body.data).toEqual({ requested: 3, updated: 3, conflicts: 0 });
-    expect((await Order.find({ deliveredAt: { $ne: null } })).length).toBe(3);
+    expect((await Order.find({ deliveredAt: { $ne: null } }).setOptions(UNSCOPED)).length).toBe(3);
   });
 
   it("rejects a save based on a stale read (409 CONFLICT)", async () => {
@@ -102,16 +102,16 @@ describe("status flow over the API", () => {
     const order = await create();
 
     // Request A reads the order…
-    const stale = await Order.findById(order._id);
+    const stale = await Order.findById(order._id).setOptions(UNSCOPED);
     // …request B saves in between…
     await new Promise((r) => setTimeout(r, 5));
-    await Order.updateOne({ _id: order._id }, { $set: { description: "saved by B" } });
+    await Order.updateOne({ _id: order._id }, { $set: { description: "saved by B" } }).setOptions(UNSCOPED);
     // …then A tries to save based on what it read.
     vi.spyOn(Order, "findOne").mockResolvedValueOnce(stale as never);
-    const req = { user: { id: "64b000000000000000000001", email: "admin@test.com", role: "admin" } } as never;
+    const req = { user: { id: "64b000000000000000000001", email: "admin@test.com", role: "admin" }, tenant: await getTenant() } as never;
 
     await expect(updateOrder(req, order._id, { cost: 1 })).rejects.toMatchObject({ status: 409, code: "CONFLICT" });
-    expect((await Order.findById(order._id))!.cost).toBe(100);
+    expect((await Order.findById(order._id).setOptions(UNSCOPED))!.cost).toBe(100);
   });
 
   it("archives closed orders 3 days after they were closed", async () => {

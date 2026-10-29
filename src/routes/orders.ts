@@ -32,7 +32,7 @@ router.get("/", async (req, res) => {
   const filter = buildOrderFilter(req, q);
 
   const [items, stats] = await Promise.all([
-    populateRefs(Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
     Order.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: 1 }, totalCost: { $sum: "$cost" } } }]),
   ]);
   const total = stats[0]?.total ?? 0;
@@ -43,7 +43,7 @@ router.get("/", async (req, res) => {
 router.get("/export", adminOnly, async (req, res) => {
   const filter = buildOrderFilter(req, listQuerySchema.parse(req.query));
   const [items, total] = await Promise.all([
-    populateRefs(Order.find(filter).sort({ createdAt: -1 }).limit(config.exportMaxRows)).lean(),
+    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).limit(config.exportMaxRows)).lean(),
     Order.countDocuments(filter),
   ]);
   ok(res, items, { total, truncated: total > items.length });
@@ -65,14 +65,14 @@ router.post("/bulk/status", async (req, res) => {
 
 router.get("/barcode/:barcode", async (req, res) => {
   const { barcode } = z.object({ barcode: str.barcode }).parse(req.params);
-  const order = await populateRefs(Order.findOne({ barcode, ...scope(req) })).lean();
+  const order = await populateRefs(req, Order.findOne({ barcode, ...scope(req) })).lean();
   if (!order) throw notFound("Order");
   ok(res, order);
 });
 
 router.get("/:id", async (req, res) => {
   const { id } = idParams.parse(req.params);
-  const order = await populateRefs(Order.findOne({ _id: id, ...scope(req) })).lean();
+  const order = await populateRefs(req, Order.findOne({ _id: id, ...scope(req) })).lean();
   if (!order) throw notFound("Order");
   ok(res, order);
 });
@@ -81,7 +81,7 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/history", async (req, res) => {
   const { id } = idParams.parse(req.params);
   if (!(await Order.exists({ _id: id, ...scope(req) }))) throw notFound("Order");
-  ok(res, await AuditEvent.find({ entity: "order", entityId: id }).sort({ createdAt: 1 }).limit(200).lean());
+  ok(res, await AuditEvent.find({ ...scope(req), entity: "order", entityId: id }).sort({ createdAt: 1 }).limit(200).lean());
 });
 
 router.post("/", async (req, res) => {
@@ -91,7 +91,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   const { id } = idParams.parse(req.params);
   await updateOrder(req, id, updateOrderSchema.parse(req.body));
-  ok(res, await populateRefs(Order.findById(id)).lean());
+  ok(res, await populateRefs(req, Order.findOne({ _id: id, ...scope(req) })).lean());
 });
 
 router.delete("/:id", adminOnly, async (req, res) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { useDb, loginAs, seedRefs, orderInput } from "./helpers";
+import { useDb, loginAs, seedRefs, orderInput, UNSCOPED } from "./helpers";
 import { AuditEvent } from "../src/models/AuditEvent";
 
 useDb();
@@ -78,7 +78,7 @@ describe("order permissions", () => {
     expect(history[1]).toMatchObject({ actor: { email: "admin@test.com" }, changes: { cost: { from: 100, to: 120 } } });
 
     await admin.delete(`/orders/${order._id}`);
-    expect(await AuditEvent.countDocuments({ entityId: order._id, action: "DELETE" })).toBe(1);
+    expect(await AuditEvent.countDocuments({ entityId: order._id, action: "DELETE" }).setOptions(UNSCOPED)).toBe(1);
   });
 
   it("uses one response shape for success and errors", async () => {

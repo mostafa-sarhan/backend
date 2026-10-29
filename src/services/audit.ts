@@ -21,6 +21,7 @@ export function auditEvent(
 ) {
   return {
     ...event,
+    tenantId: req.tenant!._id,
     entityId: new mongoose.Types.ObjectId(String(event.entityId)),
     actor: req.user ? { id: req.user.id, email: req.user.email } : undefined,
   };

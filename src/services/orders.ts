@@ -11,6 +11,7 @@ import { AppError, forbidden, notFound } from "../lib/errors";
 import { scope } from "../lib/scope";
 import { objectId, str, money, day } from "../lib/validate";
 import { auditEvent, diff, recordAudit } from "./audit";
+import { assertOrderQuota } from "./tenants";
 
 // ---------- Input schemas (strict: unknown fields are rejected) ----------
 const orderFields = {
@@ -81,18 +82,22 @@ export function buildOrderFilter(req: Request, q: ListQuery) {
   return filter;
 }
 
-export const populateRefs = <T>(query: mongoose.Query<T, unknown>) =>
-  query.populate("courier", "name").populate("merchant", "name");
+// Populated refs are filtered by tenant too (the plugin rejects unscoped populate queries).
+export const populateRefs = <T>(req: Request, query: mongoose.Query<T, unknown>) =>
+  query
+    .populate({ path: "courier", select: "name", match: scope(req) })
+    .populate({ path: "merchant", select: "name", match: scope(req) });
 
-async function assertExists(model: typeof Courier | typeof Merchant, id: string | null | undefined, what: string) {
-  if (id && !(await model.exists({ _id: id, ...scope() }))) {
+async function assertExists(req: Request, model: typeof Courier | typeof Merchant, id: string | null | undefined, what: string) {
+  if (id && !(await model.exists({ _id: id, ...scope(req) }))) {
     throw new AppError(400, "VALIDATION_ERROR", `${what} does not exist`, [{ path: what.toLowerCase(), message: "Not found" }]);
   }
 }
 
 // ---------- Create ----------
 export async function createOrder(req: Request, input: z.infer<typeof createOrderSchema>) {
-  await Promise.all([assertExists(Merchant, input.merchant, "Merchant"), assertExists(Courier, input.courier, "Courier")]);
+  await Promise.all([assertExists(req, Merchant, input.merchant, "Merchant"), assertExists(req, Courier, input.courier, "Courier")]);
+  await assertOrderQuota(req.tenant!);
 
   const order = await createWithUniqueBarcode({
     ...input,
@@ -113,7 +118,7 @@ export async function planUpdate(req: Request, order: OrderDoc, input: OrderUpda
   if (denied.length) throw new AppError(403, "FORBIDDEN_FIELDS", "You can't change these fields", denied);
   if (order.isArchived && role !== "admin") throw forbidden("Archived orders can only be changed by an admin");
 
-  await Promise.all([assertExists(Merchant, input.merchant, "Merchant"), assertExists(Courier, input.courier, "Courier")]);
+  await Promise.all([assertExists(req, Merchant, input.merchant, "Merchant"), assertExists(req, Courier, input.courier, "Courier")]);
 
   const set: Record<string, unknown> = { ...input };
   const from = order.status as OrderStatus;
@@ -154,7 +159,7 @@ export async function updateOrder(req: Request, id: string, input: OrderUpdate) 
 
   // Optimistic concurrency: only apply if nobody changed the order since we read it.
   const updated = await Order.findOneAndUpdate(
-    { _id: order._id, updatedAt: order.updatedAt },
+    { _id: order._id, ...scope(req), updatedAt: order.updatedAt },
     { $set: set },
     { returnDocument: "after", runValidators: true }
   );
@@ -171,7 +176,7 @@ export async function updateOrder(req: Request, id: string, input: OrderUpdate) 
 async function applyBulk(req: Request, orders: OrderDoc[], plans: Record<string, unknown>[]) {
   const result = await Order.bulkWrite(
     orders.map((order, i) => ({
-      updateOne: { filter: { _id: order._id, updatedAt: order.updatedAt }, update: { $set: plans[i] } },
+      updateOne: { filter: { _id: order._id, ...scope(req), updatedAt: order.updatedAt }, update: { $set: plans[i] } },
     }))
   );
   await AuditEvent.insertMany(
