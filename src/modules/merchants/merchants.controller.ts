@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ok, created } from "../../lib/respond";
 import { idParams } from "../../lib/validate";
 import { AppError } from "../../lib/errors";
-import { createMerchantBody, updateMerchantBody, merchantOrderBody } from "./merchants.schemas";
+import { createMerchantBody, updateMerchantBody, merchantOrderBody, merchantUserBody } from "./merchants.schemas";
 import * as merchants from "./merchants.service";
 
 // Merchant API-key authentication (header `api-key`).
@@ -30,6 +30,11 @@ export async function create(req: Request, res: Response) {
 
 export async function update(req: Request, res: Response) {
   ok(res, await merchants.updateMerchant(req, idParams.parse(req.params).id, updateMerchantBody.parse(req.body)));
+}
+
+export async function createUser(req: Request, res: Response) {
+  const { email, password } = merchantUserBody.parse(req.body);
+  created(res, await merchants.createMerchantUser(req, idParams.parse(req.params).id, email, password));
 }
 
 export async function rotateKey(req: Request, res: Response) {

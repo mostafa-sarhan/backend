@@ -25,8 +25,13 @@ const ADMIN_CORRECTIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   refused: ["with_courier", "pending"],
 };
 
+// Couriers only report delivery outcomes; they can't send an order back to the warehouse.
+const COURIER_OUTCOMES: OrderStatus[] = ["delivered", "returned", "refused", "exchanged"];
+
 export function allowedTransitions(from: OrderStatus, role: Role): OrderStatus[] {
-  return [...TRANSITIONS[from], ...(role === "admin" ? ADMIN_CORRECTIONS[from] ?? [] : [])];
+  if (role === "courier") return from === "with_courier" ? COURIER_OUTCOMES : [];
+  if (role === "merchant") return [];
+  return [...TRANSITIONS[from], ...(role === "admin" || role === "owner" ? ADMIN_CORRECTIONS[from] ?? [] : [])];
 }
 
 export const canTransition = (from: OrderStatus, to: OrderStatus, role: Role) =>

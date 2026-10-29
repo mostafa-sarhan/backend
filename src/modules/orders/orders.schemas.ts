@@ -12,6 +12,7 @@ const orderFields = {
   merchant: objectId,
   courier: objectId.nullable(),
   status: z.enum(ORDER_STATUSES),
+  reason: z.string().trim().max(300).nullable(),
 };
 
 export const createOrderSchema = z

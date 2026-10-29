@@ -13,6 +13,8 @@ const orderSchema = new mongoose.Schema(
     address: { type: String, required: true, trim: true, maxlength: 300 },
     cost: { type: Number, required: true, min: 0 },
     description: { type: String, trim: true, maxlength: 1000 },
+    // Why an order was returned or refused (set by the courier or staff).
+    reason: { type: String, trim: true, maxlength: 300, default: null },
     merchant: { type: mongoose.Schema.Types.ObjectId, ref: "Merchant" },
     courier: { type: mongoose.Schema.Types.ObjectId, ref: "Courier", default: null },
     status: { type: String, enum: ORDER_STATUSES, default: "pending", required: true },

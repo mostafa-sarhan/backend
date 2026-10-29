@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { str, money } from "../../lib/validate";
 
+// Portal login for a merchant (several per merchant allowed). One-time password.
+export const merchantUserBody = z.object({ email: str.email, password: z.string().max(200) }).strict();
+
 export const createMerchantBody = z.object({ name: str.name, withApiKey: z.boolean().default(true) }).strict();
 export const updateMerchantBody = z
   .object({ name: str.name.optional(), companyFee: money.nullable().optional() })

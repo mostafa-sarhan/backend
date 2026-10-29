@@ -14,6 +14,7 @@ router.get("/", requireAuth, adminOnly, c.list);
 router.post("/", requireAuth, adminOnly, c.create);
 router.patch("/:id", requireAuth, adminOnly, c.update);
 router.post("/:id/api-key", requireAuth, adminOnly, c.rotateKey);
+router.post("/:id/users", requireAuth, adminOnly, c.createUser);
 router.delete("/:id/api-key", requireAuth, adminOnly, c.revokeKey);
 
 export default router;

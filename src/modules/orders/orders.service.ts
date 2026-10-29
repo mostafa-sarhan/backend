@@ -55,8 +55,9 @@ async function assertExists(req: Request, model: typeof Courier | typeof Merchan
 }
 
 // ---------- Reads ----------
-export async function listOrders(req: Request, q: ListQuery, page: number, limit: number) {
-  const filter = buildOrderFilter(req, q);
+// `constraint` narrows the query further (e.g. a merchant's or courier's own orders).
+export async function listOrders(req: Request, q: ListQuery, page: number, limit: number, constraint: Record<string, unknown> = {}) {
+  const filter = { ...buildOrderFilter(req, q), ...constraint };
   const [items, stats] = await Promise.all([
     populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
     Order.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: 1 }, totalCost: { $sum: "$cost" } } }]),
@@ -92,6 +93,7 @@ export async function orderHistory(req: Request, id: string) {
 
 // ---------- Create ----------
 export async function createOrder(req: Request, input: CreateOrderInput) {
+  // Reached by staff and by the merchant portal (which fixes `merchant` to the merchant's own id).
   await Promise.all([assertExists(req, Merchant, input.merchant, "Merchant"), assertExists(req, Courier, input.courier, "Courier")]);
   await assertOrderQuota(req.tenant!);
 
@@ -161,8 +163,8 @@ export async function feesFor(req: Request, merchantId: string | undefined) {
 
 const conflict = () => new AppError(409, "CONFLICT", "The order was changed by someone else, reload and try again");
 
-export async function updateOrder(req: Request, id: string, input: OrderUpdate) {
-  const order = await Order.findOne({ _id: id, ...scope(req) });
+export async function updateOrder(req: Request, id: string, input: OrderUpdate, constraint: Record<string, unknown> = {}) {
+  const order = await Order.findOne({ _id: id, ...scope(req), ...constraint });
   if (!order) throw notFound("Order");
 
   const set = await planUpdate(req, order, input);

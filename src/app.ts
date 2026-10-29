@@ -18,6 +18,8 @@ import courierRoutes from "./modules/couriers/couriers.routes";
 import merchantRoutes from "./modules/merchants/merchants.routes";
 import reportRoutes from "./modules/reports/reports.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
+import courierAppRoutes from "./modules/courierApp/courierApp.routes";
+import merchantPortalRoutes from "./modules/merchantPortal/merchantPortal.routes";
 import platformRoutes from "./modules/platform/platform.routes";
 import accessRequestRoutes from "./modules/platform/accessRequests.routes";
 
@@ -58,6 +60,8 @@ export function createApp() {
   app.use("/merchants", merchantRoutes);
   app.use("/reports", reportRoutes);
   app.use("/settings", settingsRoutes);
+  app.use("/courier", courierAppRoutes);
+  app.use("/portal", merchantPortalRoutes);
   app.use("/access-requests", accessRequestRoutes);
   app.use("/platform", platformRoutes);
 

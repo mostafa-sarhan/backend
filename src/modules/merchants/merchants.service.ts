@@ -1,6 +1,8 @@
 import { Request } from "express";
 import { z } from "zod";
 import { Merchant, publicMerchant } from "./merchant.model";
+import { User } from "../users/user.model";
+import { createUser } from "../users/users.service";
 import { Order, createWithUniqueBarcode } from "../orders/order.model";
 import { recordAudit, diff } from "../audit/audit.service";
 import { loadUsableTenant, assertOrderQuota } from "../tenants/tenants.service";
@@ -21,8 +23,16 @@ export async function authenticateApiKey(apiKey: string) {
 
 export const merchantOptions = (req: Request) => Merchant.find(scope(req)).sort({ name: 1 }).select("name").lean();
 
+// With the portal logins of each merchant.
 export async function listMerchants(req: Request) {
-  return (await Merchant.find(scope(req)).sort({ createdAt: -1 })).map(publicMerchant);
+  const merchants = await Merchant.find(scope(req)).sort({ createdAt: -1 });
+  const users = await User.find({ ...scope(req), role: "merchant", merchantId: { $in: merchants.map((m) => m._id) } }).select("email merchantId").lean();
+  return merchants.map((m) => ({ ...publicMerchant(m), users: users.filter((u) => String(u.merchantId) === String(m._id)).map((u) => u.email) }));
+}
+
+export async function createMerchantUser(req: Request, id: string, email: string, password: string) {
+  if (!(await Merchant.exists({ _id: id, ...scope(req) }))) throw notFound("Merchant");
+  return createUser(req, { email, password, role: "merchant" }, { merchantId: id });
 }
 
 // The new key is returned once and never stored in plain text.
