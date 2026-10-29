@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { useDb, loginAs, seedRefs, orderInput, getTenant, UNSCOPED } from "./helpers";
-import { canTransition, ORDER_STATUSES } from "../src/domain/orderStatus";
-import { archiveOrders } from "../src/jobs/archiveOrders";
-import { Order } from "../src/models/Order";
-import { updateOrder } from "../src/services/orders";
+import { canTransition, ORDER_STATUSES } from "../src/modules/orders/orderStatus";
+import { archiveOrders } from "../src/modules/orders/archive.job";
+import { Order } from "../src/modules/orders/order.model";
+import { updateOrder } from "../src/modules/orders/orders.service";
 
 useDb();
 
@@ -49,7 +49,7 @@ describe("status flow over the API", () => {
     const order = await create();
 
     const assigned = await employee.post("/orders/bulk/assign").send({ orderIds: [order._id], courier: refs.courier });
-    expect(assigned.body.data).toEqual({ requested: 1, updated: 1, conflicts: 0 });
+    expect(assigned.body.data).toEqual({ requested: 1, updated: 1 });
 
     const delivered = await employee.patch(`/orders/${order._id}`).send({ status: "delivered" });
     expect(delivered.status).toBe(200);
@@ -93,7 +93,7 @@ describe("status flow over the API", () => {
         { id: orders[2]._id, status: "refused" },
       ],
     });
-    expect(res.body.data).toEqual({ requested: 3, updated: 3, conflicts: 0 });
+    expect(res.body.data).toEqual({ requested: 3, updated: 3 });
     expect((await Order.find({ deliveredAt: { $ne: null } }).setOptions(UNSCOPED)).length).toBe(3);
   });
 

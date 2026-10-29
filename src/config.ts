@@ -16,6 +16,15 @@ const list = (value: string | undefined) =>
     .filter(Boolean);
 
 const isProd = process.env.NODE_ENV === "production";
+const num = (name: string, fallback: number) => (process.env[name] ? Number(process.env[name]) : fallback);
+
+// Express "trust proxy": the number of reverse proxies in front of the API (e.g. 1 for nginx),
+// or a list of proxy addresses. "true" would trust any X-Forwarded-For value, so it's refused.
+export function parseTrustProxy(value: string | undefined): number | string | false {
+  if (!value || value === "false" || value === "0") return false;
+  if (value === "true") throw new Error("TRUST_PROXY=true is unsafe (spoofable X-Forwarded-For); use the number of proxies, e.g. 1");
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
 const sameSite = (process.env.COOKIE_SAMESITE || "strict").toLowerCase();
 if (!["strict", "lax", "none"].includes(sameSite)) throw new Error("COOKIE_SAMESITE must be strict, lax or none");
 
@@ -43,4 +52,22 @@ export const config = {
     company: Number(process.env.DEFAULT_COMPANY_FEE ?? 20),
   },
   exportMaxRows: Number(process.env.EXPORT_MAX_ROWS) || 5000,
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  bodyLimit: process.env.BODY_LIMIT || "100kb",
+  rateLimits: {
+    globalPer15Min: num("RATE_LIMIT_GLOBAL_PER_15MIN", 1000),
+    loginIpPer15Min: num("RATE_LIMIT_LOGIN_IP_PER_15MIN", 20),
+    platformLoginIpPer15Min: num("RATE_LIMIT_PLATFORM_LOGIN_IP_PER_15MIN", 5),
+    loginLockAfter: num("LOGIN_LOCK_AFTER_FAILURES", 5),
+    platformLoginLockAfter: num("PLATFORM_LOGIN_LOCK_AFTER_FAILURES", 3),
+    refreshIpPer15Min: num("RATE_LIMIT_REFRESH_IP_PER_15MIN", 60),
+    passwordChangePer15Min: num("RATE_LIMIT_PASSWORD_CHANGE_PER_15MIN", 5),
+    userPerMin: num("RATE_LIMIT_USER_PER_MIN", 300),
+    tenantPerMin: num("RATE_LIMIT_TENANT_PER_MIN", 3000),
+    merchantKeyPerMin: num("RATE_LIMIT_MERCHANT_KEY_PER_MIN", 60),
+    trackingIpPerMin: num("RATE_LIMIT_TRACKING_IP_PER_MIN", 20),
+    accessRequestIpPerHour: num("RATE_LIMIT_ACCESS_REQUEST_IP_PER_HOUR", 5),
+    exportUserPerHour: num("RATE_LIMIT_EXPORT_USER_PER_HOUR", 30),
+    importUserPerHour: num("RATE_LIMIT_IMPORT_USER_PER_HOUR", 10),
+  },
 };

@@ -1,19 +1,19 @@
 import mongoose from "mongoose";
 
 type Db = mongoose.mongo.Db;
-import { hashPassword, isBcryptHash } from "../lib/password";
-import { LEGACY_STATUS_MAP } from "../domain/orderStatus";
-import { hashApiKey } from "../lib/apiKeys";
-import { Order } from "../models/Order";
-import { Courier } from "../models/Courier";
-import { Merchant } from "../models/Merchant";
-import { User } from "../models/User";
-import { RefreshToken } from "../models/RefreshToken";
-import { AuditEvent } from "../models/AuditEvent";
-import { Tenant } from "../models/Tenant";
-import { PlatformAdmin } from "../models/PlatformAdmin";
-import { PlatformAuditEvent } from "../models/PlatformAuditEvent";
-import { AccessRequest } from "../models/AccessRequest";
+import { hashPassword, isBcryptHash } from "../modules/auth/password";
+import { LEGACY_STATUS_MAP } from "../modules/orders/orderStatus";
+import { hashApiKey } from "../modules/merchants/apiKeys";
+import { Order } from "../modules/orders/order.model";
+import { Courier } from "../modules/couriers/courier.model";
+import { Merchant } from "../modules/merchants/merchant.model";
+import { User } from "../modules/users/user.model";
+import { RefreshToken } from "../modules/auth/refreshToken.model";
+import { AuditEvent } from "../modules/audit/auditEvent.model";
+import { Tenant } from "../modules/tenants/tenant.model";
+import { PlatformAdmin } from "../modules/platform/platformAdmin.model";
+import { PlatformAuditEvent } from "../modules/platform/platformAuditEvent.model";
+import { AccessRequest } from "../modules/platform/accessRequest.model";
 
 export interface Migration {
   name: string;

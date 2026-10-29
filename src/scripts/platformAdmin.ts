@@ -2,9 +2,9 @@
 // The generated password is printed once.
 import { config } from "../config";
 import { connectDb, disconnectDb } from "../db";
-import { PlatformAdmin } from "../models/PlatformAdmin";
-import { hashPassword } from "../lib/password";
-import { generateInitialPassword } from "../services/platform";
+import { PlatformAdmin } from "../modules/platform/platformAdmin.model";
+import { hashPassword } from "../modules/auth/password";
+import { generateInitialPassword } from "../modules/platform/platform.service";
 import { str } from "../lib/validate";
 
 async function main() {
@@ -14,6 +14,7 @@ async function main() {
   const existing = await PlatformAdmin.findOne({ email });
   if (existing) {
     existing.password = await hashPassword(password);
+    existing.mustChangePassword = true;
     existing.tokenVersion += 1;
     await existing.save();
   } else {

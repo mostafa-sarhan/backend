@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { app, useDb, createTenant, loginAs, seedRefs, orderInput, createUser, PASSWORD, UNSCOPED } from "./helpers";
-import { Order } from "../src/models/Order";
-import { User } from "../src/models/User";
-import { Courier } from "../src/models/Courier";
-import { Tenant } from "../src/models/Tenant";
+import { Order } from "../src/modules/orders/order.model";
+import { User } from "../src/modules/users/user.model";
+import { Courier } from "../src/modules/couriers/courier.model";
+import { Tenant } from "../src/modules/tenants/tenant.model";
 import { TenantScopeError } from "../src/lib/tenantPlugin";
 
 useDb();

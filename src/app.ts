@@ -2,28 +2,29 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import { randomUUID } from "crypto";
 import { config } from "./config";
 import { logger } from "./logger";
 import { isDbReady } from "./db";
-import { AppError, errorHandler, notFoundHandler } from "./lib/errors";
+import { errorHandler, notFoundHandler } from "./lib/errors";
+import { limits } from "./lib/rateLimit";
 import { originCheck } from "./middleware/csrf";
 
-import authRoutes from "./routes/auth";
-import userRoutes from "./routes/users";
-import orderRoutes from "./routes/orders";
-import courierRoutes from "./routes/couriers";
-import merchantRoutes from "./routes/merchants";
-import reportRoutes from "./routes/reports";
-import platformRoutes from "./routes/platform";
-import accessRequestRoutes from "./routes/accessRequests";
+import authRoutes from "./modules/auth/auth.routes";
+import userRoutes from "./modules/users/users.routes";
+import orderRoutes from "./modules/orders/orders.routes";
+import courierRoutes from "./modules/couriers/couriers.routes";
+import merchantRoutes from "./modules/merchants/merchants.routes";
+import reportRoutes from "./modules/reports/reports.routes";
+import platformRoutes from "./modules/platform/platform.routes";
+import accessRequestRoutes from "./modules/platform/accessRequests.routes";
 
 export function createApp() {
   const app = express();
 
-  app.set("trust proxy", 1); // correct client IPs behind a reverse proxy (rate limiting)
+  // Real client IPs behind a reverse proxy (TRUST_PROXY = number of proxies), so limits can't be dodged.
+  app.set("trust proxy", config.trustProxy);
   app.disable("x-powered-by");
 
   app.use(
@@ -40,16 +41,8 @@ export function createApp() {
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
   app.use(cookieParser());
-  app.use(express.json({ limit: "100kb" }));
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: 500,
-      standardHeaders: "draft-8",
-      legacyHeaders: false,
-      handler: (_req, _res, next) => next(new AppError(429, "RATE_LIMITED", "Too many requests, try again later")),
-    })
-  );
+  app.use(express.json({ limit: config.bodyLimit }));
+  app.use(limits.global);
   app.use(originCheck);
 
   app.get("/health", (_req, res) => {

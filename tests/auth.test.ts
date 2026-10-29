@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { app, useDb, createUser, loginAs, PASSWORD, getTenant, UNSCOPED } from "./helpers";
-import { User } from "../src/models/User";
+import { User } from "../src/modules/users/user.model";
 
 useDb();
 

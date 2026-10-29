@@ -2,7 +2,7 @@
 import { config } from "../config";
 import { logger } from "../logger";
 import { connectDb, disconnectDb } from "../db";
-import { archiveOrders } from "../jobs/archiveOrders";
+import { archiveOrders } from "../modules/orders/archive.job";
 
 connectDb(config.mongoUri)
   .then(() => archiveOrders())

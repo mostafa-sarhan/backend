@@ -1,0 +1,231 @@
+import { Request } from "express";
+import mongoose from "mongoose";
+import { Order, OrderDoc, createWithUniqueBarcode } from "./order.model";
+import { Courier } from "../couriers/courier.model";
+import { Merchant } from "../merchants/merchant.model";
+import { AuditEvent } from "../audit/auditEvent.model";
+import { OrderStatus, canTransition, isFinal, allowedTransitions } from "./orderStatus";
+import { forbiddenFields } from "./permissions";
+import { CreateOrderInput, OrderUpdate, ListQuery } from "./orders.schemas";
+import { auditEvent, diff, recordAudit } from "../audit/audit.service";
+import { assertOrderQuota } from "../tenants/tenants.service";
+import { AppError, forbidden, notFound } from "../../lib/errors";
+import { scope } from "../../lib/scope";
+import { withTransaction } from "../../lib/transaction";
+import { config } from "../../config";
+
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Mongo filter for list/export/report queries. Days are UTC.
+export function buildOrderFilter(req: Request, q: ListQuery) {
+  const filter: Record<string, unknown> = { ...scope(req) };
+  if (q.archived !== "all") filter.isArchived = q.archived === "true";
+  if (q.status) filter.status = q.status;
+  if (q.merchant) filter.merchant = new mongoose.Types.ObjectId(q.merchant);
+  if (q.courier) filter.courier = new mongoose.Types.ObjectId(q.courier);
+  if (q.search) {
+    // Prefix match so the phone / barcode indexes are used.
+    const rx = new RegExp(`^${escapeRegex(q.search)}`);
+    filter.$or = [{ phone: rx }, { barcode: rx }];
+  }
+  const from = q.from ?? q.date;
+  const to = q.to ?? q.date;
+  if (from || to) {
+    filter.createdAt = {
+      ...(from && { $gte: new Date(`${from}T00:00:00Z`) }),
+      ...(to && { $lte: new Date(`${to}T23:59:59.999Z`) }),
+    };
+  }
+  return filter;
+}
+
+// Populated refs are filtered by tenant too (the plugin rejects unscoped populate queries).
+export const populateRefs = <T>(req: Request, query: mongoose.Query<T, unknown>) =>
+  query
+    .populate({ path: "courier", select: "name", match: scope(req) })
+    .populate({ path: "merchant", select: "name", match: scope(req) });
+
+async function assertExists(req: Request, model: typeof Courier | typeof Merchant, id: string | null | undefined, what: string) {
+  if (id && !(await model.exists({ _id: id, ...scope(req) }))) {
+    throw new AppError(400, "VALIDATION_ERROR", `${what} does not exist`, [{ path: what.toLowerCase(), message: "Not found" }]);
+  }
+}
+
+// ---------- Reads ----------
+export async function listOrders(req: Request, q: ListQuery, page: number, limit: number) {
+  const filter = buildOrderFilter(req, q);
+  const [items, stats] = await Promise.all([
+    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+    Order.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: 1 }, totalCost: { $sum: "$cost" } } }]),
+  ]);
+  const total = stats[0]?.total ?? 0;
+  return { items, meta: { total, page, pages: Math.ceil(total / limit), totalCost: stats[0]?.totalCost ?? 0 } };
+}
+
+export async function exportOrders(req: Request, q: ListQuery) {
+  const filter = buildOrderFilter(req, q);
+  const [items, total] = await Promise.all([
+    populateRefs(req, Order.find(filter).sort({ createdAt: -1 }).limit(config.exportMaxRows)).lean(),
+    Order.countDocuments(filter),
+  ]);
+  return { items, meta: { total, truncated: total > items.length } };
+}
+
+export async function statusCounts(req: Request) {
+  const rows = await Order.aggregate([{ $match: scope(req) }, { $group: { _id: "$status", count: { $sum: 1 } } }]);
+  return Object.fromEntries(rows.map((r) => [r._id, r.count]));
+}
+
+export async function getOrder(req: Request, filter: Record<string, unknown>) {
+  const order = await populateRefs(req, Order.findOne({ ...filter, ...scope(req) })).lean();
+  if (!order) throw notFound("Order");
+  return order;
+}
+
+export async function orderHistory(req: Request, id: string) {
+  if (!(await Order.exists({ _id: id, ...scope(req) }))) throw notFound("Order");
+  return AuditEvent.find({ ...scope(req), entity: "order", entityId: id }).sort({ createdAt: 1 }).limit(200).lean();
+}
+
+// ---------- Create ----------
+export async function createOrder(req: Request, input: CreateOrderInput) {
+  await Promise.all([assertExists(req, Merchant, input.merchant, "Merchant"), assertExists(req, Courier, input.courier, "Courier")]);
+  await assertOrderQuota(req.tenant!);
+
+  return withTransaction(async () => {
+    const order = await createWithUniqueBarcode({ ...input, ...scope(req), status: input.courier ? "with_courier" : "pending" });
+    await recordAudit(req, { entity: "order", entityId: order._id, action: "CREATE", label: order.barcode, changes: { status: { from: null, to: order.status } } });
+    return order;
+  });
+}
+
+// ---------- Update ----------
+// Validates the change against role permissions and the status state machine, and returns
+// the $set to apply. Throws on any violation. Money and status rules live here only.
+export async function planUpdate(req: Request, order: OrderDoc, input: OrderUpdate) {
+  const role = req.user!.role;
+
+  const denied = forbiddenFields(role, Object.keys(input));
+  if (denied.length) throw new AppError(403, "FORBIDDEN_FIELDS", "You can't change these fields", denied);
+  if (order.isArchived && !["owner", "admin"].includes(role)) throw forbidden("Archived orders can only be changed by an admin");
+
+  await Promise.all([assertExists(req, Merchant, input.merchant, "Merchant"), assertExists(req, Courier, input.courier, "Courier")]);
+
+  const set: Record<string, unknown> = { ...input };
+  const from = order.status as OrderStatus;
+  const to = input.status;
+
+  if (to && to !== from) {
+    if (!canTransition(from, to, role)) {
+      throw new AppError(409, "INVALID_STATUS_TRANSITION", `Can't change status from ${from} to ${to}`, {
+        from,
+        to,
+        allowed: allowedTransitions(from, role),
+      });
+    }
+    const courier = input.courier !== undefined ? input.courier : order.courier;
+    if (to === "with_courier" && !courier) {
+      throw new AppError(400, "VALIDATION_ERROR", "A courier is required", [{ path: "courier", message: "Required" }]);
+    }
+    if (to === "pending") set.courier = null; // back to the warehouse, unassigned
+    if (isFinal(to)) set.deliveredAt = new Date();
+    if (isFinal(from) && !isFinal(to)) {
+      set.deliveredAt = null;
+      set.isArchived = false;
+    }
+  } else {
+    delete set.status;
+  }
+  return set;
+}
+
+const conflict = () => new AppError(409, "CONFLICT", "The order was changed by someone else, reload and try again");
+
+export async function updateOrder(req: Request, id: string, input: OrderUpdate) {
+  const order = await Order.findOne({ _id: id, ...scope(req) });
+  if (!order) throw notFound("Order");
+
+  const set = await planUpdate(req, order, input);
+  if (!Object.keys(set).length) return order;
+
+  return withTransaction(async () => {
+    // Optimistic concurrency: only apply if nobody changed the order since we read it.
+    const updated = await Order.findOneAndUpdate(
+      { _id: order._id, ...scope(req), updatedAt: order.updatedAt },
+      { $set: set },
+      { returnDocument: "after", runValidators: true }
+    );
+    if (!updated) throw conflict();
+
+    const changes = diff(order.toObject(), set);
+    await recordAudit(req, { entity: "order", entityId: order._id, action: changes.status ? "STATUS_CHANGE" : "UPDATE", label: order.barcode, changes });
+    return updated;
+  });
+}
+
+// ---------- Bulk ----------
+// All-or-nothing: validate every order first, then one bulkWrite + audit insert in a transaction.
+// Each write is guarded by updatedAt; a concurrent edit aborts the whole batch with 409.
+async function applyBulk(req: Request, orders: OrderDoc[], plans: Record<string, unknown>[]) {
+  return withTransaction(async () => {
+    const result = await Order.bulkWrite(
+      orders.map((order, i) => ({
+        updateOne: { filter: { _id: order._id, ...scope(req), updatedAt: order.updatedAt }, update: { $set: plans[i] } },
+      }))
+    );
+    if (result.matchedCount !== orders.length) throw conflict();
+    await AuditEvent.insertMany(
+      orders.map((order, i) => {
+        const changes = diff(order.toObject(), plans[i]);
+        return auditEvent(req, { entity: "order", entityId: order._id, action: changes.status ? "STATUS_CHANGE" : "UPDATE", label: order.barcode, changes });
+      })
+    );
+    return { requested: orders.length, updated: result.modifiedCount };
+  });
+}
+
+async function loadAll(req: Request, ids: string[]) {
+  const orders = await Order.find({ _id: { $in: ids }, ...scope(req) });
+  const byId = new Map(orders.map((o) => [o._id.toString(), o]));
+  const missing = ids.filter((id) => !byId.has(id));
+  if (missing.length) throw new AppError(404, "NOT_FOUND", "Some orders were not found", { missing });
+  return ids.map((id) => byId.get(id)!);
+}
+
+async function planAll(req: Request, orders: OrderDoc[], inputs: OrderUpdate[]) {
+  const plans: Record<string, unknown>[] = [];
+  const problems: { id: string; barcode: string; code: string; message: string }[] = [];
+  for (const [i, order] of orders.entries()) {
+    try {
+      plans.push(await planUpdate(req, order, inputs[i]));
+    } catch (err) {
+      const e = err as AppError;
+      problems.push({ id: order._id.toString(), barcode: order.barcode, code: e.code ?? "INTERNAL_ERROR", message: e.message });
+    }
+  }
+  if (problems.length) throw new AppError(409, "INVALID_STATUS_TRANSITION", "Some orders can't be changed; nothing was saved", problems);
+  return plans;
+}
+
+// Hand pending orders to a courier.
+export async function bulkAssign(req: Request, orderIds: string[], courier: string) {
+  const orders = await loadAll(req, [...new Set(orderIds)]);
+  const plans = await planAll(req, orders, orders.map(() => ({ courier, status: "with_courier" as const })));
+  return applyBulk(req, orders, plans);
+}
+
+export async function bulkStatus(req: Request, updates: { id: string; status: OrderStatus }[]) {
+  const unique = [...new Map(updates.map((u) => [u.id, u])).values()];
+  const orders = await loadAll(req, unique.map((u) => u.id));
+  const plans = await planAll(req, orders, unique.map((u) => ({ status: u.status })));
+  return applyBulk(req, orders, plans);
+}
+
+// ---------- Delete ----------
+export async function deleteOrder(req: Request, id: string) {
+  await withTransaction(async () => {
+    const order = await Order.findOneAndDelete({ _id: id, ...scope(req) });
+    if (!order) throw notFound("Order");
+    await recordAudit(req, { entity: "order", entityId: order._id, action: "DELETE", label: order.barcode, changes: { order: { from: order.toObject(), to: null } } });
+  });
+}

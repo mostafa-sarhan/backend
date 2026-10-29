@@ -2,7 +2,7 @@ import { config } from "./config";
 import { logger } from "./logger";
 import { connectDb, disconnectDb } from "./db";
 import { createApp } from "./app";
-import { startArchiveJob } from "./jobs/archiveOrders";
+import { startArchiveJob } from "./modules/orders/archive.job";
 
 async function main() {
   await connectDb(config.mongoUri);

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { app, useDb, loginAs, loginPlatform, createTenant } from "./helpers";
-import { PlatformAuditEvent } from "../src/models/PlatformAuditEvent";
-import { AccessRequest } from "../src/models/AccessRequest";
+import { PlatformAuditEvent } from "../src/modules/platform/platformAuditEvent.model";
+import { AccessRequest } from "../src/modules/platform/accessRequest.model";
 
 useDb();
 
@@ -79,5 +79,19 @@ describe("public access requests", () => {
     expect((await request(app).post("/access-requests").send(requestBody)).status).toBe(201);
     expect((await request(app).post("/access-requests").send(requestBody)).status).toBe(201);
     expect(await AccessRequest.countDocuments()).toBe(1);
+  });
+});
+
+describe("platform admin password", () => {
+  it("a generated password must be changed before using the console", async () => {
+    const { PlatformAdmin } = await import("../src/modules/platform/platformAdmin.model");
+    const { hashPassword } = await import("../src/modules/auth/password");
+    await PlatformAdmin.create({ email: "fresh@platform.test", password: await hashPassword("Generated1pass") });
+    const agent = request.agent(app);
+    await agent.post("/platform/auth/login").send({ email: "fresh@platform.test", password: "Generated1pass" });
+    expect((await agent.get("/platform/auth/me")).body.data.admin.mustChangePassword).toBe(true);
+    expect((await agent.get("/platform/tenants")).body.error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+    expect((await agent.post("/platform/auth/change-password").send({ currentPassword: "Generated1pass", newPassword: "MyOwnPlatf0rm!" })).status).toBe(200);
+    expect((await agent.get("/platform/tenants")).status).toBe(200);
   });
 });

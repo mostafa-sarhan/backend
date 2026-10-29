@@ -1,14 +1,15 @@
 import { beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import request from "supertest";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { createApp } from "../src/app";
-import { User, Role } from "../src/models/User";
-import { Tenant, TenantDoc } from "../src/models/Tenant";
-import { Courier } from "../src/models/Courier";
-import { Merchant } from "../src/models/Merchant";
-import { PlatformAdmin } from "../src/models/PlatformAdmin";
-import { hashPassword } from "../src/lib/password";
+import { User, Role } from "../src/modules/users/user.model";
+import { Tenant, TenantDoc } from "../src/modules/tenants/tenant.model";
+import { Courier } from "../src/modules/couriers/courier.model";
+import { Merchant } from "../src/modules/merchants/merchant.model";
+import { PlatformAdmin } from "../src/modules/platform/platformAdmin.model";
+import { hashPassword } from "../src/modules/auth/password";
+import { resetRateLimits } from "../src/lib/rateLimit";
 
 export { UNSCOPED } from "../src/lib/tenantPlugin";
 
@@ -17,16 +18,17 @@ export const PASSWORD = "Str0ngPassw0rd";
 
 let defaultTenant: TenantDoc | null = null;
 
-// One in-memory MongoDB per test file, wiped before each test.
+// One in-memory MongoDB replica set per test file (transactions need one), wiped before each test.
 export function useDb() {
-  let server: MongoMemoryServer;
+  let server: MongoMemoryReplSet;
   beforeAll(async () => {
-    server = await MongoMemoryServer.create();
+    server = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
     await mongoose.connect(server.getUri());
     await Promise.all(Object.values(mongoose.models).map((m) => m.syncIndexes()));
   });
   beforeEach(async () => {
     defaultTenant = null;
+    resetRateLimits();
     await Promise.all(Object.values(mongoose.connection.collections).map((c) => c.deleteMany({})));
   });
   afterAll(async () => {
@@ -66,7 +68,7 @@ export async function seedRefs(tenant?: TenantDoc) {
 }
 
 export async function loginPlatform(email = "root@platform.test") {
-  await PlatformAdmin.create({ email, password: await hashPassword(PASSWORD) });
+  await PlatformAdmin.create({ email, password: await hashPassword(PASSWORD), mustChangePassword: false });
   const agent = request.agent(app);
   const res = await agent.post("/platform/auth/login").send({ email, password: PASSWORD });
   if (res.status !== 200) throw new Error(`platform login failed: ${JSON.stringify(res.body)}`);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { app, useDb, loginAs, seedRefs, orderInput, UNSCOPED } from "./helpers";
-import { Merchant } from "../src/models/Merchant";
+import { Merchant } from "../src/modules/merchants/merchant.model";
 
 useDb();
 

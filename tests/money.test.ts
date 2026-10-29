@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { settlement, summarize } from "../src/lib/money";
+import { settlement, summarize } from "../src/modules/reports/money";
 
 describe("settlement formula", () => {
   it("deducts only the company fee from the merchant by default", () => {
